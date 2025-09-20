@@ -390,3 +390,18 @@ class CacheEntry:
 
         self.last_accessed = datetime.now()
         self.access_count += 1
+
+
+####
+##      GITHUB FILE MODEL
+#####
+@dataclass
+class GitHubFile:
+    """Represents a file in GitHub repository."""
+    
+    path: str
+    type: str  # 'file', 'dir', 'symlink'
+    size: int
+    download_url: Optional[str] = None
+    sha: Optional[str] = None
+    html_url: Optional[str] = None
