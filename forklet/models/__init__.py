@@ -296,6 +296,23 @@ class ProgressInfo:
 
         return (datetime.now() - self.started_at).total_seconds()
 
+    def update_file_progress(
+        self, 
+        bytes_downloaded: int, 
+        current_file: Optional[str] = None
+    ) -> None:
+        """Update progress for the current file."""
+
+        self.downloaded_bytes += bytes_downloaded
+        if current_file:
+            self.current_file = current_file
+    
+    def complete_file(self) -> None:
+        """Mark a file as completed."""
+        
+        self.downloaded_files += 1
+        self.current_file = None
+
 
 ####
 ##      DOWNLOAD RESULT MODEL

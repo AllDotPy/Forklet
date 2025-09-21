@@ -1,4 +1,3 @@
-# src/github_downloader/services/github_api_service.py
 """
 Service for interacting with GitHub API with rate limiting and error handling.
 """
@@ -6,7 +5,8 @@ Service for interacting with GitHub API with rate limiting and error handling.
 import logging
 from typing import List, Optional, Dict, Any
 
-import requests
+# import requests
+import httpx
 from github import Github, GithubException
 # from github.Repository import Repository as GithubRepository
 
@@ -46,16 +46,16 @@ class GitHubAPIService:
         self.retry_manager = retry_manager
         self.auth_token = auth_token
         self.github_client = Github(auth_token) if auth_token else Github()
-        self.session = requests.Session()
+        self.http_client = httpx.Client()
         
         if auth_token:
-            self.session.headers.update({
+            self.http_client.headers.update({
                 "Authorization": f"token {auth_token}",
                 "Accept": "application/vnd.github.v3+json",
                 "User-Agent": USER_AGENT
             })
         else:
-            self.session.headers.update({
+            self.http_client.headers.update({
                 "Accept": "application/vnd.github.v3+json",
                 "User-Agent": USER_AGENT
             })
@@ -207,8 +207,8 @@ class GitHubAPIService:
         
         try:
             with self.rate_limiter:
-                response = self.retry_manager.execute(
-                    lambda: self.session.get(url, params=params, timeout=30)
+                response: httpx.Response = self.retry_manager.execute(
+                    lambda: self.http_client.get(url, params=params, timeout=30)
                 )
             
             # Update rate limit info
@@ -230,8 +230,8 @@ class GitHubAPIService:
             
             return files
             
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 403:
+        except httpx.HTTPError as e:
+            if '403' in str(e):
                 raise RateLimitError("GitHub API rate limit exceeded")
             raise
     
@@ -252,14 +252,14 @@ class GitHubAPIService:
 
         try:
             with self.rate_limiter:
-                response = self.retry_manager.execute(
-                    lambda: self.session.get(download_url, timeout=30)
+                response: httpx.Response = self.retry_manager.execute(
+                    lambda: self.http_client.get(download_url, timeout=30)
                 )
             
             response.raise_for_status()
             return response.content
             
-        except requests.exceptions.RequestException as e:
+        except httpx.RequestError as e:
             raise DownloadError(
                 f"Failed to download file from {download_url}: {e}"
             )
@@ -289,8 +289,8 @@ class GitHubAPIService:
         params = {"ref": ref.sha}
         
         with self.rate_limiter:
-            response = self.retry_manager.execute(
-                lambda: self.session.get(url, params=params, timeout=30)
+            response: httpx.Response = self.retry_manager.execute(
+                lambda: self.http_client.get(url, params=params, timeout=30)
             )
         
         response.raise_for_status()
@@ -320,8 +320,8 @@ class GitHubAPIService:
         url = f"{self.BASE_URL}/rate_limit"
         
         with self.rate_limiter:
-            response = self.retry_manager.execute(
-                lambda: self.session.get(url, timeout=10)
+            response: httpx.Response = self.retry_manager.execute(
+                lambda: self.http_client.get(url, timeout=10)
             )
         
         response.raise_for_status()

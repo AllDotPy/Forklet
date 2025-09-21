@@ -5,7 +5,8 @@ Error handling utilities and decorators for robust operation.
 import logging
 import functools
 from typing import Callable, Any, Optional
-from requests.exceptions import RequestException
+
+import httpx
 from github import GithubException
 
 
@@ -95,7 +96,7 @@ def handle_api_error(func: Callable) -> Callable:
                 raise DownloadError(f"GitHub API error: {e}", e) from e
 
         # Request Exceptions
-        except RequestException as e:
+        except httpx.RequestError as e:
 
             if '429' in str(e) or 'rate limit' in str(e).lower():
                 raise RateLimitError("Rate limit exceeded", e) from e
@@ -129,7 +130,7 @@ def retry_on_error(max_retries: int = 3) -> Callable:
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
-                except (RateLimitError, RequestException, ConnectionError) as e:
+                except (RateLimitError, httpx.RequestError, ConnectionError) as e:
                     last_exception = e
                     if attempt < max_retries:
                         logger.warning(f"Retry {attempt + 1}/{max_retries} after error: {e}")
