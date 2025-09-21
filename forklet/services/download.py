@@ -21,6 +21,9 @@ from ..models.constants import USER_AGENT
 logger = logging.getLogger(__name__)
 
 
+####
+##      DOWNLOAD CONFIGURATION MODEL
+#####
 @dataclass
 class DownloadConfig:
     """Configuration for file downloads."""
@@ -31,6 +34,9 @@ class DownloadConfig:
     progress_callback: Optional[Callable[[int, int], None]] = None
 
 
+####
+##      DOWNLOAD SERVICE
+#####
 class DownloadService:
     """
     Service for downloading files with progress tracking, 
