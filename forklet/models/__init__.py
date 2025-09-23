@@ -422,7 +422,7 @@ class GitHubFile:
     """Represents a file in GitHub repository."""
     
     path: str
-    type: str  # 'file', 'dir', 'symlink'
+    type: str  # 'blob', 'tree', 'symlink'
     size: int
     download_url: Optional[str] = None
     sha: Optional[str] = None

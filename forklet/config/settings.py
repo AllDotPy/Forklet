@@ -22,7 +22,9 @@ class AppSettings:
     
     # GitHub API settings
     github_api_url: str = "https://api.github.com"
-    github_token: Optional[str] = field(default_factory=lambda: os.getenv('GITHUB_TOKEN'))
+    github_token: Optional[str] = field(
+        default_factory=lambda: os.getenv('GITHUB_TOKEN')
+    )
     default_timeout: int = 30
     max_retries: int = 3
     
@@ -34,13 +36,17 @@ class AppSettings:
     
     # Cache settings
     cache_enabled: bool = True
-    cache_directory: Path = field(default_factory=lambda: Path.home() / ".forklet" / "cache")
+    cache_directory: Path = field(
+        default_factory=lambda: Path.home() / ".forklet" / "cache"
+    )
     cache_ttl_hours: int = 24
     max_cache_size_mb: int = 1024  # 1GB
     
     # Logging settings
     log_level: str = "INFO"
-    log_file: Optional[Path] = field(default_factory=lambda: Path.home() / ".forklet" / "logs" / "app.log")
+    log_file: Optional[Path] = field(
+        default_factory=lambda: Path.home() / ".forklet" / "logs" / "app.log"
+    )
     
     # UI settings
     progress_bar_enabled: bool = True

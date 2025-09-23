@@ -8,7 +8,8 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import httpx
-import json, base64
+import json
+import base64
 from tqdm import tqdm
 
 from ..infrastructure.retry_manager import RetryManager
@@ -193,7 +194,7 @@ class DownloadService:
 
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
-            print(destination)
+            # print(destination)
 
             # Decode content
             b64_ctnt = json.loads(content).get('content')

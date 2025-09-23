@@ -8,8 +8,8 @@ authors = [{ name = "AllDotPy", email = "hello@alldotpy.com" }]
 maintainers = [{ name = "#Einswilli", email = "einswilligoeh@email.com" }]
 requires-python = ">=3.10"
 keywords = [
-    "forklet", "CI/CD", "github Downloader", "guardian",
-    "pipelines", "iam", "secrets"
+    "forklet", "CI/CD", "github Downloader", "github-files",
+    "pipelines", "github clone"
 ]
 
 dependencies = [

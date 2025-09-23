@@ -15,6 +15,7 @@ from forklet.models import DownloadStrategy
 @click.pass_context
 def cli(ctx, verbose: bool, token: Optional[str]):
     """Forklet - Download files and folders from GitHub repositories."""
+    
     ctx.ensure_object(dict)
     ctx.obj['verbose'] = verbose
     ctx.obj['token'] = token

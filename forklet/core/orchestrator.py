@@ -128,7 +128,7 @@ class DownloadOrchestrator:
             filter_engine = FilterEngine(request.filters)
             filter_result = filter_engine.filter_files(files)
             
-            target_files = files#filter_result.included_files
+            target_files = filter_result.included_files
             progress.total_files = len(target_files)
             progress.total_bytes = sum(file.size for file in target_files)
             

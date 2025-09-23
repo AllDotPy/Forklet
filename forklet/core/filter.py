@@ -89,7 +89,7 @@ class FilterEngine:
         """
 
         # Check file type
-        if file.type != 'file':
+        if file.type != 'blob':
             return False
         
         # Check file size limits
@@ -106,11 +106,11 @@ class FilterEngine:
             return False
         
         if any(
-            path in file.download_url 
+            path in file.path 
             for path in self.criteria.target_paths
         ):
             return True
-        
+                
         # Check path patterns
         return self.criteria.matches_path(file.path)
     
