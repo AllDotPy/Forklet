@@ -2,7 +2,6 @@
 Service for downloading files with progress tracking and error handling.
 """
 
-import logging
 from typing import Optional, Callable
 from pathlib import Path
 from dataclasses import dataclass
@@ -19,8 +18,8 @@ from ..infrastructure.error_handler import (
 from ..models import ProgressInfo
 from ..models.constants import USER_AGENT
 
+from forklet.infrastructure.logger import logger
 
-logger = logging.getLogger(__name__)
 
 
 ####

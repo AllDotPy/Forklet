@@ -4,6 +4,7 @@ import logging
 
 import click
 
+from forklet.infrastructure.logger import logger
 from forklet.interfaces.cli import ForkletCLI
 from forklet.models import DownloadStrategy
 
@@ -21,7 +22,7 @@ def cli(ctx, verbose: bool, token: Optional[str]):
     ctx.obj['token'] = token
     
     if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
         click.echo("🔍 Verbose mode enabled")
 
 

@@ -2,7 +2,6 @@
 Service for interacting with GitHub API with rate limiting and error handling.
 """
 
-import logging
 from typing import List, Optional, Dict, Any
 
 # import requests
@@ -22,8 +21,8 @@ from ..models import (
 )
 from ..models.constants import USER_AGENT
 
+from forklet.infrastructure.logger import logger
 
-logger = logging.getLogger(__name__)
 
 
 ####

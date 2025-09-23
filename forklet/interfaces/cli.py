@@ -15,23 +15,14 @@ from forklet.infrastructure import (
     RateLimiter, RetryManager, DownloadError, 
     RateLimitError, AuthenticationError, RepositoryNotFoundError
 )
+from forklet.infrastructure.logger import logger
 from forklet.models import (
     DownloadRequest, DownloadStrategy, FilterCriteria,
     DownloadResult
 )
 
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('forklet.log')
-    ]
-)
 
-logger = logging.getLogger(__name__)
 
 
 class ForkletCLI:

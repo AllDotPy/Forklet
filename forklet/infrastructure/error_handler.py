@@ -2,15 +2,14 @@
 Error handling utilities and decorators for robust operation.
 """
 
-import logging
 import functools
 from typing import Callable, Any, Optional
 
 import httpx
 from github import GithubException
 
+from forklet.infrastructure.logger import logger
 
-logger = logging.getLogger(__name__)
 
 
 
