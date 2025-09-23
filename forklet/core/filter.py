@@ -105,6 +105,12 @@ class FilterEngine:
         ):
             return False
         
+        if any(
+            path in file.download_url 
+            for path in self.criteria.target_paths
+        ):
+            return True
+        
         # Check path patterns
         return self.criteria.matches_path(file.path)
     

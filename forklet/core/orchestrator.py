@@ -121,12 +121,14 @@ class DownloadOrchestrator:
                 request.git_ref
             )
             stats.api_calls += 1
+
+            # print(files)
             
             # Filter files
             filter_engine = FilterEngine(request.filters)
             filter_result = filter_engine.filter_files(files)
             
-            target_files = filter_result.included_files
+            target_files = files#filter_result.included_files
             progress.total_files = len(target_files)
             progress.total_bytes = sum(file.size for file in target_files)
             
@@ -280,6 +282,7 @@ class DownloadOrchestrator:
             
             # Download file content
             content = self.github_service.get_file_content(file.download_url)
+            print(content)
             stats.api_calls += 1
             
             # Save content to file

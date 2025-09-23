@@ -98,6 +98,11 @@ class RepositoryInfo:
     language: Optional[str] = None
     description: Optional[str] = None
     topics: List[str] = field(default_factory=list)
+
+    @property
+    def display_name(self):
+        """return the repo s'displayneme"""
+        return f'{self.owner}/{self.name}'
     
     def __post_init__(self) -> None:
         """Validate repository information after initialization."""

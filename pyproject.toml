@@ -37,7 +37,7 @@ dev = [
 ]
 
 [project.scripts]
-valkyrie = "forklet.__main__:main"
+forklet = "forklet.__main__:main"
 
 [project.urls]
 # Homepage = "https://alldotpy.github.io/FletX"

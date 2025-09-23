@@ -8,6 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import httpx
+import json, base64
 from tqdm import tqdm
 
 from ..infrastructure.retry_manager import RetryManager
@@ -192,12 +193,22 @@ class DownloadService:
 
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
+            print(destination)
+
+            # Decode content
+            b64_ctnt = json.loads(content).get('content')
             
-            with open(destination, 'wb') as f:
-                bytes_written = f.write(content)
+            if b64_ctnt:
+                ctnt = base64.b64decode(b64_ctnt)
+
+                with open(destination, 'wb') as f:
+                    bytes_written = f.write(ctnt)
             
-            logger.debug(f"Saved {bytes_written} bytes to {destination}")
-            return bytes_written
+                logger.debug(f"Saved {bytes_written} bytes to {destination}")
+                return bytes_written
+
+            logger.warning(f"Skip saving {destination}")
+            return 0
             
         except IOError as e:
             raise DownloadError(f"Failed to save file {destination}: {e}")
