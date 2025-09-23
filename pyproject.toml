@@ -13,13 +13,13 @@ keywords = [
 ]
 
 dependencies = [
+    "click>=8.2.1",
     "httpx>=0.28.1",
     "pydantic>=2.11.9",
     "pygithub>=2.8.1",
     "python-dotenv>=1.1.1",
     "rich>=14.1.0",
     "tqdm>=4.67.1",
-    "typer>=0.18.0",
 ]
 
 [project.optional-dependencies]
@@ -40,9 +40,9 @@ dev = [
 forklet = "forklet.__main__:main"
 
 [project.urls]
-# Homepage = "https://alldotpy.github.io/FletX"
+# Homepage = "https://alldotpy.github.io/Forklet"
 Repository = "https://github.com/AllDotPy/Forklet"
-# Documentation = "https://alldotpy.github.io/FletX"
+# Documentation = "https://alldotpy.github.io/Forklet"
 Tracker = "https://github.com/AllDotPy/Forklet/issues"
 
 [tool.setuptools]
@@ -51,3 +51,8 @@ packages = ["forklet"]
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "twine>=6.2.0",
+]

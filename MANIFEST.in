@@ -1,0 +1,7 @@
+recursive-include forklet/config *.*
+recursive-include forklet/core *.*
+recursive-include forklet/infrastructure *.*
+recursive-include forklet/interfaces *.*
+recursive-include forklet/models *.*
+recursive-include forklet/services *.*
+global-prune __pycache__
