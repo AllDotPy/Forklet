@@ -282,7 +282,7 @@ class DownloadOrchestrator:
             
             # Download file content
             content = self.github_service.get_file_content(file.download_url)
-            print(content)
+            # print(content)
             stats.api_calls += 1
             
             # Save content to file
