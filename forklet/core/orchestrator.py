@@ -3,7 +3,6 @@ Orchestrator for managing the complete download process
 with concurrency and error handling.
 """
 
-import logging
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -18,8 +17,8 @@ from ..models import (
 from ..services import GitHubAPIService, DownloadService
 from .filter import FilterEngine, FilterResult
 
+from forklet.infrastructure.logger import logger
 
-logger = logging.getLogger(__name__)
 
 
 ####

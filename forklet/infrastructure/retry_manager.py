@@ -3,15 +3,14 @@ Retry management for network operations with exponential backoff.
 """
 
 import time
-import logging
 from typing import Callable, Optional, Type, Any
 from dataclasses import dataclass
 from requests.exceptions import (
     RequestException, Timeout, ConnectionError
 )
 
+from forklet.infrastructure.logger import logger
 
-logger = logging.getLogger(__name__)
 
 
 ####

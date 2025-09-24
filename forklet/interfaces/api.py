@@ -3,7 +3,6 @@
 Python API for Forklet GitHub Repository Downloader.
 """
 
-import logging
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from dataclasses import dataclass
@@ -11,13 +10,13 @@ from dataclasses import dataclass
 from forklet.core import DownloadOrchestrator
 from forklet.services import GitHubAPIService, DownloadService
 from forklet.infrastructure import RateLimiter, RetryManager
+from forklet.infrastructure.logger import logger
 from forklet.models import (
     DownloadRequest, DownloadResult, DownloadStrategy, FilterCriteria,
     RepositoryInfo, GitReference, ProgressInfo
 )
 
 
-logger = logging.getLogger(__name__)
 
 
 @dataclass
