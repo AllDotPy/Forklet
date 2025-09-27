@@ -18,7 +18,9 @@ from forklet.models import (
 
 
 
-
+####
+##      DOWNLOAD CONFIG
+#####
 @dataclass
 class DownloadConfig:
     """Configuration for API downloads."""
@@ -30,6 +32,9 @@ class DownloadConfig:
     preserve_structure: bool = True
 
 
+####
+##      GITHUB DOWNLOADER PYTHON API
+#####
 class GitHubDownloader:
     """
     Main API class for programmatic access to Forklet functionality.

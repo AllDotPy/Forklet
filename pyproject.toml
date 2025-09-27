@@ -1,6 +1,6 @@
 [project]
 name = "forklet"
-version = "0.1.0"
+version = "0.1.1"
 description = "Download any file or folder from any GitHub repo by branch, tag, or commit with glob pattern filtering."
 readme = "README.md"
 license = {file = "LICENSE"}

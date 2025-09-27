@@ -8,6 +8,7 @@ import click
 from forklet.infrastructure.logger import logger
 from forklet.interfaces.cli import ForkletCLI
 from forklet.models import DownloadStrategy
+from forklet.models.constants import VERSION 
 
 
 # Create Click command group
@@ -142,6 +143,13 @@ def info(ctx, repository: str, ref: str):
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)
+
+
+@cli.command()
+def version():
+    """Print Forklet version"""
+
+    click.echo(f"Forklet {VERSION}")
 
 
 ####    MAIN ENTRYPOINT FOR THE FORKLET CLI
