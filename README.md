@@ -104,8 +104,8 @@ Or use a `.env` file:
 GITHUB_TOKEN=your_github_token
 FORKLET_CONCURRENT_DOWNLOADS=10
 FORKLET_CACHE_ENABLED=true
-FORKLET_LOG_LEVEL=DEBUG -->
-```
+FORKLET_LOG_LEVEL=DEBUG 
+```-->
 
 ## 🤝 Contributing
 
