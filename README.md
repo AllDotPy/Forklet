@@ -58,7 +58,7 @@ from pathlib import Path
 downloader = GitHubDownloader(auth_token="your_github_token")
 
 # Download entire repository
-result = downloader.download(
+result = await downloader.download(
     owner="octocat",
     repo="hello-world",
     destination=Path("./downloads"),
@@ -71,7 +71,7 @@ print(f"Downloaded {len(result.downloaded_files)} files")
 print(f"Total size: {result.progress.downloaded_bytes} bytes")
 
 # Download specific directory
-result = downloader.download_directory(
+result = await downloader.download_directory(
     owner="octocat",
     repo="hello-world",
     directory_path="src",
@@ -79,7 +79,7 @@ result = downloader.download_directory(
 )
 
 # Download specific file
-result = downloader.download_file(
+result = await downloader.download_file(
     owner="octocat",
     repo="hello-world",
     file_path="README.md",
@@ -87,7 +87,7 @@ result = downloader.download_file(
 )
 ```
 
-## Configuration
+<!-- ## Configuration
 
 Set environment variables for configuration:
 
@@ -104,7 +104,7 @@ Or use a `.env` file:
 GITHUB_TOKEN=your_github_token
 FORKLET_CONCURRENT_DOWNLOADS=10
 FORKLET_CACHE_ENABLED=true
-FORKLET_LOG_LEVEL=DEBUG
+FORKLET_LOG_LEVEL=DEBUG -->
 ```
 
 ## 🤝 Contributing
