@@ -4,7 +4,6 @@ Command-line interface for Forklet GitHub Repository Downloader.
 """
 
 import click
-import logging
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -22,9 +21,9 @@ from forklet.models import (
 )
 
 
-
-
-
+####
+##      FOKLET CLI
+#####
 class ForkletCLI:
     """Main CLI application class."""
     
@@ -117,7 +116,7 @@ class ForkletCLI:
             target_paths = target_paths
         )
     
-    def execute_download(
+    async def execute_download(
         self,
         repository: str,
         destination: str,
@@ -126,7 +125,8 @@ class ForkletCLI:
         strategy: DownloadStrategy,
         token: Optional[str],
         concurrent: int,
-        overwrite: bool
+        overwrite: bool,
+        progress: bool = True
     ) -> None:
         """
         Execute the download operation.
@@ -151,11 +151,11 @@ class ForkletCLI:
             
             # Get repository info
             click.echo(f"📦 Fetching repository information for {owner}/{repo_name}...")
-            repo_info = self.github_service.get_repository_info(owner, repo_name)
+            repo_info = await self.github_service.get_repository_info(owner, repo_name)
             
             # Resolve Git reference
             click.echo(f"🔍 Resolving reference '{ref}'...")
-            git_ref = self.github_service.resolve_reference(owner, repo_name, ref)
+            git_ref = await self.github_service.resolve_reference(owner, repo_name, ref)
             
             # Create download request
             request = DownloadRequest(
@@ -166,12 +166,15 @@ class ForkletCLI:
                 filters = filters,
                 token = token,
                 max_concurrent_downloads = concurrent,
-                overwrite_existing = overwrite
+                overwrite_existing = overwrite,
+                show_progress_bars = progress
             )
             
             # Execute download
-            click.echo(f"🚀 Starting download with {concurrent} concurrent workers...")
-            result = self.orchestrator.execute_download(request)
+            click.echo(
+                f"🚀 Starting download with {concurrent} concurrent workers..."
+            )
+            result = await self.orchestrator.execute_download(request)
             
             # Display results
             self.display_results(result)

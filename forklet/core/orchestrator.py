@@ -3,19 +3,18 @@ Orchestrator for managing the complete download process
 with concurrency and error handling.
 """
 
-import concurrent.futures
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
 from pathlib import Path
-from typing import List, Optional, Dict, Callable
+from typing import List, Optional, Dict
 from dataclasses import dataclass
 from datetime import datetime
 
 from ..models import (
     DownloadRequest, DownloadResult, ProgressInfo, DownloadStatus,
-    FileDownloadInfo, GitHubFile
+    GitHubFile
 )
 from ..services import GitHubAPIService, DownloadService
-from .filter import FilterEngine, FilterResult
+from .filter import FilterEngine
 
 from forklet.infrastructure.logger import logger
 
@@ -78,16 +77,17 @@ class DownloadOrchestrator:
         self,
         github_service: GitHubAPIService,
         download_service: DownloadService,
-        max_workers: int = 10
+        max_concurrent_downloads: int = 10
     ):
         self.github_service = github_service
         self.download_service = download_service
-        self.max_workers = max_workers
+        self.max_concurrent_downloads = max_concurrent_downloads
         self._is_cancelled = False
+        self._semaphore = asyncio.Semaphore(max_concurrent_downloads)
     
-    def execute_download(self, request: DownloadRequest) -> DownloadResult:
+    async def execute_download(self, request: DownloadRequest) -> DownloadResult:
         """
-        Execute the complete download process.
+        Execute the complete download process asynchronously.
         
         Args:
             request: Download request configuration
@@ -95,33 +95,31 @@ class DownloadOrchestrator:
         Returns:
             DownloadResult with comprehensive results
         """
-
         if self._is_cancelled:
-            raise RuntimeError(
-                "Download orchestrator has been cancelled"
-            )
+            raise RuntimeError("Download orchestrator has been cancelled")
         
-        logger.info(f"Starting download for {request.repository.display_name}@{request.git_ref}")
+        logger.debug(
+            "Starting async download for "
+            f"{request.repository.display_name}@{request.git_ref}"
+        )
         
         # Initialize statistics and progress
         stats = DownloadStatistics(start_time=datetime.now())
         progress = ProgressInfo(
-            total_files = 0, 
-            downloaded_files = 0, 
-            total_bytes = 0, 
-            downloaded_bytes = 0
+            total_files=0, 
+            downloaded_files=0, 
+            total_bytes=0, 
+            downloaded_bytes=0
         )
         
         try:
             # Get repository tree
-            files = self.github_service.get_repository_tree(
+            files = await self.github_service.get_repository_tree(
                 request.repository.owner,
                 request.repository.name,
                 request.git_ref
             )
             stats.api_calls += 1
-
-            # print(files)
             
             # Filter files
             filter_engine = FilterEngine(request.filters)
@@ -131,25 +129,25 @@ class DownloadOrchestrator:
             progress.total_files = len(target_files)
             progress.total_bytes = sum(file.size for file in target_files)
             
-            logger.info(
+            logger.debug(
                 f"Filtered {filter_result.filtered_files}/{filter_result.total_files} "
                 "files for download"
             )
             
             # Prepare destination
             if request.create_destination:
-                self.download_service.ensure_directory(request.destination)
+                await self.download_service.ensure_directory(request.destination)
             
             # Create download result
             result = DownloadResult(
-                request = request,
-                status = DownloadStatus.IN_PROGRESS,
-                progress = progress,
-                started_at = datetime.now()
+                request=request,
+                status=DownloadStatus.IN_PROGRESS,
+                progress=progress,
+                started_at=datetime.now()
             )
             
-            # Download files concurrently
-            downloaded_files, failed_files = self._download_files_concurrently(
+            # Download files concurrently with asyncio
+            downloaded_files, failed_files = await self._download_files_concurrently(
                 target_files, request, progress, stats
             )
             
@@ -163,7 +161,7 @@ class DownloadOrchestrator:
             stats.end_time = datetime.now()
             result.mark_completed()
             
-            logger.info(
+            logger.debug(
                 f"Download completed: {len(downloaded_files)} successful, "
                 f"{len(failed_files)} failed, {stats.total_bytes} bytes"
             )
@@ -182,7 +180,7 @@ class DownloadOrchestrator:
             )
             return result
     
-    def _download_files_concurrently(
+    async def _download_files_concurrently(
         self,
         files: List[GitHubFile],
         request: DownloadRequest,
@@ -190,7 +188,7 @@ class DownloadOrchestrator:
         stats: DownloadStatistics
     ) -> tuple[List[str], Dict[str, str]]:
         """
-        Download files concurrently with thread pool.
+        Download files concurrently using asyncio.gather with semaphore.
         
         Args:
             files: List of files to download
@@ -201,47 +199,59 @@ class DownloadOrchestrator:
         Returns:
             Tuple of (downloaded_files, failed_files)
         """
-
         downloaded_files = []
         failed_files = {}
         
-        with ThreadPoolExecutor(
-            max_workers = request.max_concurrent_downloads
-        ) as executor:
-            # Submit all download tasks
-            future_to_file = {
-                executor.submit(
-                    self._download_single_file,
-                    file, request, progress, stats
-                ): file for file in files
-            }
-            
-            # Process completed tasks
-            for future in as_completed(future_to_file):
-                file = future_to_file[future]
+        # Create download tasks with semaphore control
+        tasks = [
+            self._download_single_file_with_semaphore(file, request, progress, stats)
+            for file in files
+        ]
+        
+        # Execute all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Process results
+        for file, result in zip(files, results):
+            if self._is_cancelled:
+                break
                 
-                try:
-                    result = future.result()
-                    if result:
-                        downloaded_files.append(file.path)
-                        stats.downloaded_files += 1
-                        stats.total_bytes += result
-                    else:
-                        stats.skipped_files += 1
-                        
-                except Exception as e:
-                    stats.failed_files += 1
-                    failed_files[file.path] = str(e)
-                    logger.error(f"Failed to download {file.path}: {e}")
-                
-                # Check for cancellation
-                if self._is_cancelled:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    break
+            if isinstance(result, Exception):
+                stats.failed_files += 1
+                failed_files[file.path] = str(result)
+                logger.error(f"Failed to download {file.path}: {result}")
+            elif result is not None:
+                downloaded_files.append(file.path)
+                stats.downloaded_files += 1
+                stats.total_bytes += result
+            else:
+                stats.skipped_files += 1
         
         return downloaded_files, failed_files
     
-    def _download_single_file(
+    async def _download_single_file_with_semaphore(
+        self,
+        file: GitHubFile,
+        request: DownloadRequest,
+        progress: ProgressInfo,
+        stats: DownloadStatistics
+    ) -> Optional[int]:
+        """
+        Download a single file with semaphore control.
+        
+        Args:
+            file: File to download
+            request: Download request
+            progress: Progress tracker
+            stats: Statistics tracker
+            
+        Returns:
+            Number of bytes downloaded, or None if skipped
+        """
+        async with self._semaphore:
+            return await self._download_single_file(file, request, progress, stats)
+    
+    async def _download_single_file(
         self,
         file: GitHubFile,
         request: DownloadRequest,
@@ -280,12 +290,15 @@ class DownloadOrchestrator:
                 return None
             
             # Download file content
-            content = self.github_service.get_file_content(file.download_url)
-            # print(content)
+            content = await self.github_service.get_file_content(file.download_url)
             stats.api_calls += 1
             
             # Save content to file
-            bytes_written = self.download_service.save_content(content, target_path)
+            bytes_written = await self.download_service.save_content(
+                content, 
+                target_path,
+                show_progress = request.show_progress_bars
+            )
             
             # Update progress
             progress.update_file_progress(bytes_written, file.path)
@@ -304,13 +317,13 @@ class DownloadOrchestrator:
         self._is_cancelled = True
         logger.info("Download cancelled by user")
     
-    def pause(self) -> None:
+    async def pause(self) -> None:
         """Pause the current download operation."""
 
         # Implementation would track state for resumable downloads
         logger.info("Download paused")
     
-    def resume(self) -> None:
+    async def resume(self) -> None:
         """Resume a paused download operation."""
 
         # Implementation would resume from saved state
@@ -323,6 +336,6 @@ class DownloadOrchestrator:
         Returns:
             Current ProgressInfo, or None if no download in progress
         """
+        
         # Implementation would track progress state
         return None
-    

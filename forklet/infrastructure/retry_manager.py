@@ -2,8 +2,11 @@
 Retry management for network operations with exponential backoff.
 """
 
-import time
-from typing import Callable, Optional, Type, Any
+import asyncio
+import random
+from typing import (
+    Callable, Optional, Type, Awaitable, TypeVar
+)
 from dataclasses import dataclass
 from requests.exceptions import (
     RequestException, Timeout, ConnectionError
@@ -11,7 +14,7 @@ from requests.exceptions import (
 
 from forklet.infrastructure.logger import logger
 
-
+T = TypeVar('T')
 
 ####
 ##      RETRY CONFIG MODEL
@@ -40,75 +43,73 @@ class RetryManager:
     Handles both transient network errors and GitHub API rate limits.
     """
     
-    def __init__(self, config: Optional[RetryConfig] = None):
-        self.config = config or RetryConfig()
+    def __init__(
+        self,
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+        max_delay: float = 30.0,
+        exponential_base: float = 2.0,
+        jitter: bool = True
+    ):
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.exponential_base = exponential_base
+        self.jitter = jitter
     
-    def execute(
-        self, 
-        operation: Callable[[], Any], 
-        *args, 
-        **kwargs
-    ) -> Any:
+    async def execute(
+        self,
+        func: Callable[[], Awaitable[T]],
+        exceptions: tuple = (Exception,),
+        max_retries: Optional[int] = None
+    ) -> T:
         """
-        Execute an operation with retry logic.
+        Execute a function with retry logic.
         
         Args:
-            operation: Callable to execute
-            *args: Positional arguments for the operation
-            **kwargs: Keyword arguments for the operation
+            func: Async function to execute
+            exceptions: Tuple of exceptions to retry on
+            max_retries: Override default max retries
             
         Returns:
-            Result of the operation
+            Result of the function execution
             
         Raises:
-            Exception: If all retries fail
+            Last exception if all retries are exhausted
         """
 
+        max_attempts = (max_retries or self.max_retries) + 1
         last_exception = None
         
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(max_attempts):
             try:
-                if attempt > 0:
-                    delay = self._calculate_delay(attempt)
-                    logger.warning(
-                        f"Retry attempt {attempt}/{self.config.max_retries} after {delay:.2f}s"
-                        )
-                    time.sleep(delay)
-                
-                return operation(*args, **kwargs)
-                
-            #  Retryable errors
-            except self.config.retryable_errors as e:
+                return await func()
+            except exceptions as e:
                 last_exception = e
-                logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 
-                # Check if we should stop retrying
-                if attempt == self.config.max_retries:
-                    break
+                if attempt == max_attempts - 1:
+                    # Last attempt failed
+                    logger.error(f"All {max_attempts} attempts failed, giving up")
+                    raise e
                 
-                # Special handling for certain errors
-                if isinstance(e, Timeout):
-                    logger.warning("Timeout occurred, increasing delay for next attempt")
-                
-            except Exception as e:
-                # Non-retryable error
-                logger.error(f"Non-retryable error: {e}")
-                raise
+                delay = self._calculate_delay(attempt)
+                logger.warning(
+                    f"Attempt {attempt + 1} failed: {e}. Retrying in {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)
         
-        # All retries failed
-        logger.error(f"All {self.config.max_retries} retry attempts failed")
-        raise last_exception or Exception("Retry operation failed")
+        # This should never be reached, but just in case
+        if last_exception:
+            raise last_exception
     
     def _calculate_delay(self, attempt: int) -> float:
-        """
-        Calculate delay for retry attempt using exponential backoff.
+        """Calculate delay for retry attempt."""
         
-        Args:
-            attempt: Current attempt number (1-based)
-            
-        Returns:
-            Delay in seconds
-        """
+        delay = self.base_delay * (self.exponential_base ** attempt)
         
-        delay = self.config.initial_delay * (self.config.backoff_factor ** (attempt - 1))
-        return min(delay, self.config.max_delay)
+        if self.jitter:
+            # Add ±20% jitter
+            jitter_factor = random.uniform(0.8, 1.2)
+            delay *= jitter_factor
+        
+        return min(delay, self.max_delay)

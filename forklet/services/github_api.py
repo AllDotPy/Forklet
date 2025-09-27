@@ -4,7 +4,7 @@ Service for interacting with GitHub API with rate limiting and error handling.
 
 from typing import List, Optional, Dict, Any
 
-# import requests
+import asyncio
 import httpx
 from github import Github, GithubException
 # from github.Repository import Repository as GithubRepository
@@ -30,7 +30,8 @@ from forklet.infrastructure.logger import logger
 #####
 class GitHubAPIService:
     """
-    Service for interacting with GitHub API with comprehensive error handling.
+    Async service for interacting with GitHub API with comprehensive error handling.
+    Focused solely on GitHub API interactions - no file system operations.
     """
     
     BASE_URL = "https://api.github.com"
@@ -39,28 +40,51 @@ class GitHubAPIService:
         self,
         rate_limiter: RateLimiter,
         retry_manager: RetryManager,
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        timeout: int = 30
     ):
         self.rate_limiter = rate_limiter
         self.retry_manager = retry_manager
         self.auth_token = auth_token
-        self.github_client = Github(auth_token) if auth_token else Github()
-        self.http_client = httpx.Client()
+        self.timeout = timeout
+        
+        # Configure HTTP client
+        headers = {
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": USER_AGENT
+        }
         
         if auth_token:
-            self.http_client.headers.update({
-                "Authorization": f"token {auth_token}",
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": USER_AGENT
-            })
-        else:
-            self.http_client.headers.update({
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": USER_AGENT
-            })
+            headers["Authorization"] = f"token {auth_token}"
+        
+        self.http_client = httpx.AsyncClient(
+            headers=headers,
+            timeout=httpx.Timeout(timeout)
+        )
+        
+        # Sync client for PyGithub (used only for metadata)
+        self.github_client = Github(auth_token) if auth_token else Github()
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+
+        await self.close()
+    
+    async def close(self):
+        """Close the HTTP client."""
+        await self.http_client.aclose()
     
     @handle_api_error
-    def get_repository_info(self, owner: str, repo: str) -> RepositoryInfo:
+    async def get_repository_info(
+        self, 
+        owner: str, 
+        repo: str
+    ) -> RepositoryInfo:
         """
         Get comprehensive information about a repository.
         
@@ -77,10 +101,11 @@ class GitHubAPIService:
         """
 
         try:
-            with self.rate_limiter:
-                github_repo = self.retry_manager.execute(
-                    lambda: self.github_client.get_repo(f"{owner}/{repo}")
-                )
+            # Use sync client for this operation as it's metadata-focused
+            await self.rate_limiter.acquire()
+            github_repo = await asyncio.to_thread(
+                lambda: self.github_client.get_repo(f"{owner}/{repo}")
+            )
             
             return RepositoryInfo(
                 owner = owner,
@@ -107,10 +132,11 @@ class GitHubAPIService:
             raise
     
     @handle_api_error
-    def resolve_reference(
+    async def resolve_reference(
         self, 
         owner: str, 
-        repo: str, ref: str
+        repo: str, 
+        ref: str
     ) -> GitReference:
         """
         Resolve a Git reference (branch, tag, or commit) to a specific commit SHA.
@@ -129,47 +155,51 @@ class GitHubAPIService:
 
         try:
             # Try to get as branch first
-            with self.rate_limiter:
-                branch = self.retry_manager.execute(
-                    lambda: self.github_client.get_repo(f"{owner}/{repo}").get_branch(ref)
-                )
-                return GitReference(
-                    name = ref,
-                    ref_type = 'branch',
-                    sha = branch.commit.sha
-                )
+            await self.rate_limiter.acquire()
+            branch = await asyncio.to_thread(
+                lambda: self.github_client.get_repo(f"{owner}/{repo}").get_branch(ref)
+            )
+            return GitReference(
+                name = ref,
+                ref_type = 'branch',
+                sha = branch.commit.sha
+            )
         except GithubException:
             pass  # Not a branch, try other types
         
         try:
             # Try to get as tag
-            with self.rate_limiter:
-                tags = self.retry_manager.execute(
-                    lambda: self.github_client.get_repo(f"{owner}/{repo}").get_tags()
+            await self.rate_limiter.acquire()
+            tags = await asyncio.to_thread(
+                lambda: list(
+                    self.github_client.get_repo(
+                        f"{owner}/{repo}"
+                    ).get_tags()
                 )
-                for tag in tags:
-                    if tag.name == ref:
-                        return GitReference(
-                            name = ref,
-                            ref_type = 'tag',
-                            sha = tag.commit.sha
-                        )
+            )
+            for tag in tags:
+                if tag.name == ref:
+                    return GitReference(
+                        name = ref,
+                        ref_type = 'tag',
+                        sha = tag.commit.sha
+                    )
         except GithubException:
             pass  # Not a tag
         
         try:
             # Try to get as commit
-            with self.rate_limiter:
-                commit = self.retry_manager.execute(
-                    lambda: self.github_client.get_repo(
-                        f"{owner}/{repo}"
-                    ).get_commit(ref)
-                )
-                return GitReference(
-                    name = ref,
-                    ref_type = 'commit',
-                    sha = commit.sha
-                )
+            await self.rate_limiter.acquire()
+            commit = await asyncio.to_thread(
+                lambda: self.github_client.get_repo(
+                    f"{owner}/{repo}"
+                ).get_commit(ref)
+            )
+            return GitReference(
+                name=ref,
+                ref_type='commit',
+                sha=commit.sha
+            )
         except GithubException:
             pass  # Not a valid commit
         
@@ -178,7 +208,7 @@ class GitHubAPIService:
         )
     
     @handle_api_error
-    def get_repository_tree(
+    async def get_repository_tree(
         self,
         owner: str,
         repo: str,
@@ -205,58 +235,70 @@ class GitHubAPIService:
         params = {"recursive": "1"} if recursive else {}
         
         try:
-            with self.rate_limiter:
-                response: httpx.Response = self.retry_manager.execute(
-                    lambda: self.http_client.get(url, params=params, timeout=30)
-                )
+            await self.rate_limiter.acquire()
+            response = await self.retry_manager.execute(
+                lambda: self.http_client.get(url, params=params)
+            )
             
             # Update rate limit info
-            self.rate_limiter.update_rate_limit_info(response.headers)
+            await self.rate_limiter.update_rate_limit_info(response.headers)
             
             response.raise_for_status()
             tree_data = response.json()
             
             files = []
             for item in tree_data.get("tree", []):
-                files.append(GitHubFile(
-                    path = item["path"],
-                    type = item["type"],
-                    size = item.get("size", 0),
-                    download_url = item.get("url"),
-                    sha = item.get("sha"),
-                    html_url = item.get("html_url")
-                ))
+
+                # Only include files (blobs), not directories
+                if item["type"] == "blob":
+                    files.append(GitHubFile(
+                        path = item["path"],
+                        type = item["type"],
+                        size = item.get("size", 0),
+                        download_url = item.get("url"),
+                        sha = item.get("sha"),
+                        html_url = item.get("html_url")
+                    ))
             
             return files
             
-        except httpx.HTTPError as e:
-            if '403' in str(e):
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 403:
                 raise RateLimitError("GitHub API rate limit exceeded")
             raise
     
     @handle_api_error
-    def get_file_content(self, download_url: str) -> bytes:
+    async def get_file_content(self, download_url: str) -> bytes:
         """
-        Download file content from GitHub.
+        Download file content from GitHub API.
         
         Args:
-            download_url: Direct download URL for the file
+            download_url: GitHub API URL for the file content
             
         Returns:
-            File content as bytes
+            File content as bytes (already decoded from base64)
             
         Raises:
             DownloadError: If download fails
         """
 
         try:
-            with self.rate_limiter:
-                response: httpx.Response = self.retry_manager.execute(
-                    lambda: self.http_client.get(download_url, timeout=30)
-                )
+            await self.rate_limiter.acquire()
+            response = await self.retry_manager.execute(
+                lambda: self.http_client.get(download_url)
+            )
             
             response.raise_for_status()
-            return response.content
+            
+            # GitHub API returns base64 encoded content
+            content_data = response.json()
+            if 'content' in content_data:
+                import base64
+                return base64.b64decode(content_data['content'])
+            else:
+                raise DownloadError(
+                    f"No content found in API response for {download_url}"
+                )
             
         except httpx.RequestError as e:
             raise DownloadError(
@@ -264,7 +306,7 @@ class GitHubAPIService:
             )
     
     @handle_api_error
-    def get_directory_content(
+    async def get_directory_content(
         self,
         owner: str,
         repo: str,
@@ -287,28 +329,29 @@ class GitHubAPIService:
         url = f"{self.BASE_URL}/repos/{owner}/{repo}/contents/{path}"
         params = {"ref": ref.sha}
         
-        with self.rate_limiter:
-            response: httpx.Response = self.retry_manager.execute(
-                lambda: self.http_client.get(url, params=params, timeout=30)
-            )
+        await self.rate_limiter.acquire()
+        response = await self.retry_manager.execute(
+            lambda: self.http_client.get(url, params=params)
+        )
         
         response.raise_for_status()
         contents = response.json()
         
         files = []
         for item in contents:
-            files.append(GitHubFile(
-                path = item["path"],
-                type = item["type"],
-                size = item.get("size", 0),
-                download_url = item.get("download_url"),
-                sha = item.get("sha"),
-                html_url = item.get("html_url")
-            ))
+            if item["type"] == "file":  # Only include files
+                files.append(GitHubFile(
+                    path = item["path"],
+                    type = item["type"],
+                    size = item.get("size", 0),
+                    download_url = item.get("download_url"),
+                    sha = item.get("sha"),
+                    html_url = item.get("html_url")
+                ))
         
         return files
     
-    def get_rate_limit_info(self) -> Dict[str, Any]:
+    async def get_rate_limit_info(self) -> Dict[str, Any]:
         """
         Get current rate limit information.
         
@@ -318,10 +361,27 @@ class GitHubAPIService:
 
         url = f"{self.BASE_URL}/rate_limit"
         
-        with self.rate_limiter:
-            response: httpx.Response = self.retry_manager.execute(
-                lambda: self.http_client.get(url, timeout=10)
-            )
+        await self.rate_limiter.acquire()
+        response = await self.retry_manager.execute(
+            lambda: self.http_client.get(url)
+        )
         
         response.raise_for_status()
         return response.json()
+    
+    async def test_connection(self) -> bool:
+        """
+        Test connection to GitHub API.
+        
+        Returns:
+            True if connection is successful, False otherwise
+        """
+
+        try:
+            await self.get_rate_limit_info()
+            return True
+        except Exception as e:
+            logger.error(
+                f"GitHub API connection test failed: {e}"
+            )
+            return False

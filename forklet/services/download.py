@@ -2,37 +2,20 @@
 Service for downloading files with progress tracking and error handling.
 """
 
-from typing import Optional, Callable
+from typing import Optional, List
 from pathlib import Path
-from dataclasses import dataclass
+import asyncio
+import aiofiles
 
-import httpx
-import json
-import base64
-from tqdm import tqdm
+from tqdm.asyncio import tqdm as async_tqdm
 
 from ..infrastructure.retry_manager import RetryManager
 from ..infrastructure.error_handler import (
     handle_api_error, retry_on_error, DownloadError
 )
-from ..models import ProgressInfo
-from ..models.constants import USER_AGENT
+from ..models import ProgressInfo, DownloadConfig
 
 from forklet.infrastructure.logger import logger
-
-
-
-####
-##      DOWNLOAD CONFIGURATION MODEL
-#####
-@dataclass
-class DownloadConfig:
-    """Configuration for file downloads."""
-    
-    chunk_size: int = 8192
-    timeout: int = 30
-    max_retries: int = 3
-    progress_callback: Optional[Callable[[int, int], None]] = None
 
 
 ####
@@ -40,182 +23,135 @@ class DownloadConfig:
 #####
 class DownloadService:
     """
-    Service for downloading files with progress tracking, 
-    retry logic, and error handling.
+    Async service for file operations: saving, creating directories, etc.
+    Focused solely on file system operations - no network requests.
     """
     
     def __init__(self, retry_manager: Optional[RetryManager] = None):
         self.retry_manager = retry_manager or RetryManager()
-        self.client = httpx.Client()
-        self.client.headers.update({
-            "User-Agent": USER_AGENT
-        })
     
     @retry_on_error(max_retries=3)
     @handle_api_error
-    def download_file(
+    async def save_content(
         self,
-        url: str,
+        content: bytes,
         destination: Path,
-        config: Optional[DownloadConfig] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None
+        show_progress: bool = False,
+        config: Optional[DownloadConfig] = None
     ) -> int:
         """
-        Download a file from URL to destination with progress tracking.
+        Save content to a file asynchronously.
         
         Args:
-            url: File URL to download
+            content: Content to save as bytes
             destination: Local path to save the file
+            show_progress: Whether to show progress bar
             config: Download configuration
-            progress_callback: Callback for progress updates (bytes_downloaded, total_bytes)
             
         Returns:
-            Number of bytes downloaded
+            Number of bytes written
             
         Raises:
-            DownloadError: If download fails
+            DownloadError: If save operation fails
         """
 
         config = config or DownloadConfig()
         
         try:
             # Create parent directories if they don't exist
-            destination.parent.mkdir(parents=True, exist_ok=True)
+            await self.ensure_directory(destination.parent)
             
-            # Get file size for progress tracking
-            head_response = self.client.head(url, timeout=config.timeout)
-            total_size = int(head_response.headers.get('content-length', 0))
-            
-            # Set up progress tracking
+            # Setup progress tracking
+            total_size = len(content)
             progress_bar = None
-            if progress_callback or total_size > 0:
-                progress_bar = tqdm(
-                    total=total_size,
-                    unit='B',
-                    unit_scale=True,
-                    desc=destination.name,
-                    leave=False
+            
+            if show_progress and total_size > 1024:  # Only show for files > 1KB
+                progress_bar = async_tqdm(
+                    total = total_size,
+                    unit = 'B',
+                    unit_scale = True,
+                    desc = destination.name,
+                    leave = False
                 )
             
-            def update_progress(chunk_bytes: int) -> None:
-                """Update progress for each chunk."""
-                if progress_bar:
-                    progress_bar.update(chunk_bytes)
-                if progress_callback:
-                    progress_callback(chunk_bytes, total_size)
+            bytes_written = 0
             
-            # Download the file
-            response: httpx.Response = self.retry_manager.execute(
-                lambda: self.client.get(url, stream=True, timeout=config.timeout)
-            )
-            response.raise_for_status()
-            
-            bytes_downloaded = 0
-            with open(destination, 'wb') as f:
-                for chunk in response.iter_bytes(chunk_size=config.chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        chunk_size = len(chunk)
-                        bytes_downloaded += chunk_size
-                        update_progress(chunk_size)
+            # Write file in chunks to allow for progress tracking
+            async with aiofiles.open(destination, 'wb') as f:
+                for i in range(0, total_size, config.chunk_size):
+                    chunk = content[i:i + config.chunk_size]
+                    await f.write(chunk)
+                    chunk_size = len(chunk)
+                    bytes_written += chunk_size
+                    
+                    if progress_bar:
+                        progress_bar.update(chunk_size)
+                    
+                    # Allow other tasks to run
+                    if i % (config.chunk_size * 10) == 0:
+                        await asyncio.sleep(0)
             
             if progress_bar:
                 progress_bar.close()
             
-            logger.debug(f"Downloaded {bytes_downloaded} bytes to {destination}")
-            return bytes_downloaded
+            logger.debug(f"Saved {bytes_written} bytes to {destination}")
+            return bytes_written
             
-        except httpx.RequestError as e:
-            # Clean up partially downloaded file
-            if destination.exists():
-                destination.unlink()
-            raise DownloadError(f"Failed to download {url}: {e}")
-        
+        except IOError as e:
+            raise DownloadError(
+                f"Failed to save file {destination}: {e}"
+            )
         except Exception as e:
-            # Clean up on any error
-            if destination.exists():
-                destination.unlink()
-            raise DownloadError(f"Unexpected error during download: {e}")
+            raise DownloadError(
+                f"Unexpected error saving file {destination}: {e}"
+            )
     
-    def download_file_with_progress(
+    async def save_content_with_progress(
         self,
-        url: str,
+        content: bytes,
         destination: Path,
         progress_info: ProgressInfo,
         filename: str,
         config: Optional[DownloadConfig] = None
     ) -> int:
         """
-        Download a file with integrated progress tracking.
+        Save content with integrated progress tracking.
         
         Args:
-            url: File URL to download
+            content: Content to save as bytes
             destination: Local path to save the file
             progress_info: ProgressInfo object to update
             filename: Name of the file for progress display
             config: Download configuration
             
         Returns:
-            Number of bytes downloaded
+            Number of bytes written
         """
 
         def progress_callback(
             chunk_bytes: int, 
             total_bytes: int
         ) -> None:
-            progress_info.update_file_progress(chunk_bytes, filename)
+            progress_info.update_file_progress(
+                chunk_bytes, filename
+            )
         
-        bytes_downloaded = self.download_file(
-            url=url,
-            destination=destination,
-            config=config,
-            progress_callback=progress_callback
+        config = config or DownloadConfig(
+            progress_callback = progress_callback
+        )
+        
+        bytes_written = await self.save_content(
+            content = content,
+            destination = destination,
+            config = config
         )
         
         progress_info.complete_file()
-        return bytes_downloaded
+        return bytes_written
     
-    def save_content(
-        self, 
-        content: bytes, 
-        destination: Path
-    ) -> int:
+    async def file_exists(self, path: Path) -> bool:
         """
-        Save content to a file.
-        
-        Args:
-            content: Content to save as bytes
-            destination: Local path to save the file
-            
-        Returns:
-            Number of bytes written
-        """
-
-        try:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            # print(destination)
-
-            # Decode content
-            b64_ctnt = json.loads(content).get('content')
-            
-            if b64_ctnt:
-                ctnt = base64.b64decode(b64_ctnt)
-
-                with open(destination, 'wb') as f:
-                    bytes_written = f.write(ctnt)
-            
-                logger.debug(f"Saved {bytes_written} bytes to {destination}")
-                return bytes_written
-
-            logger.warning(f"Skip saving {destination}")
-            return 0
-            
-        except IOError as e:
-            raise DownloadError(f"Failed to save file {destination}: {e}")
-    
-    def file_exists(self, path: Path) -> bool:
-        """
-        Check if a file exists and is accessible.
+        Check if a file exists and is accessible asynchronously.
         
         Args:
             path: File path to check
@@ -224,11 +160,16 @@ class DownloadService:
             True if file exists and is accessible
         """
 
-        return path.exists() and path.is_file()
+        try:
+            return await asyncio.to_thread(
+                lambda: path.exists() and path.is_file()
+            )
+        except Exception:
+            return False
     
-    def directory_exists(self, path: Path) -> bool:
+    async def directory_exists(self, path: Path) -> bool:
         """
-        Check if a directory exists and is accessible.
+        Check if a directory exists and is accessible asynchronously.
         
         Args:
             path: Directory path to check
@@ -237,9 +178,14 @@ class DownloadService:
             True if directory exists and is accessible
         """
 
-        return path.exists() and path.is_dir()
+        try:
+            return await asyncio.to_thread(
+                lambda: path.exists() and path.is_dir()
+            )
+        except Exception:
+            return False
     
-    def ensure_directory(self, path: Path) -> None:
+    async def ensure_directory(self, path: Path) -> None:
         """
         Ensure a directory exists, creating it if necessary.
         
@@ -251,13 +197,17 @@ class DownloadService:
         """
 
         try:
-            path.mkdir(parents=True, exist_ok=True)
+            await asyncio.to_thread(
+                lambda: path.mkdir(parents=True, exist_ok=True)
+            )
         except OSError as e:
-            raise DownloadError(f"Failed to create directory {path}: {e}")
+            raise DownloadError(
+                f"Failed to create directory {path}: {e}"
+            )
     
-    def get_file_size(self, path: Path) -> int:
+    async def get_file_size(self, path: Path) -> int:
         """
-        Get the size of a file in bytes.
+        Get the size of a file in bytes asynchronously.
         
         Args:
             path: File path
@@ -268,14 +218,184 @@ class DownloadService:
         Raises:
             DownloadError: If file doesn't exist or is inaccessible
         """
-
-        if not self.file_exists(path):
+        
+        if not await self.file_exists(path):
             raise DownloadError(f"File does not exist: {path}")
         
         try:
-            return path.stat().st_size
+            return await asyncio.to_thread(
+                lambda: path.stat().st_size
+            )
         except OSError as e:
             raise DownloadError(
                 f"Failed to get file size for {path}: {e}"
             )
+    
+    async def delete_file(self, path: Path) -> bool:
+        """
+        Delete a file asynchronously.
         
+        Args:
+            path: File path to delete
+            
+        Returns:
+            True if file was deleted, False if it didn't exist
+            
+        Raises:
+            DownloadError: If deletion fails
+        """
+
+        if not await self.file_exists(path):
+            return False
+        
+        try:
+            await asyncio.to_thread(lambda: path.unlink())
+            return True
+        except OSError as e:
+            raise DownloadError(
+                f"Failed to delete file {path}: {e}"
+            )
+    
+    async def create_backup(self, path: Path) -> Path:
+        """
+        Create a backup of an existing file.
+        
+        Args:
+            path: Original file path
+            
+        Returns:
+            Path to backup file
+            
+        Raises:
+            DownloadError: If backup creation fails
+        """
+
+        if not await self.file_exists(path):
+            raise DownloadError(
+                f"Cannot backup non-existent file: {path}"
+            )
+        
+        backup_path = path.with_suffix(f"{path.suffix}.backup")
+        counter = 1
+        
+        # Find an available backup name
+        while await self.file_exists(backup_path):
+            backup_path = path.with_suffix(f"{path.suffix}.backup.{counter}")
+            counter += 1
+        
+        try:
+            # Read original file
+            async with aiofiles.open(path, 'rb') as src:
+                content = await src.read()
+            
+            # Write backup
+            await self.save_content(content, backup_path)
+            
+            logger.info(f"Created backup: {backup_path}")
+            return backup_path
+            
+        except Exception as e:
+            raise DownloadError(f"Failed to create backup of {path}: {e}")
+    
+    async def batch_save_contents(
+        self,
+        contents_and_paths: List[tuple[bytes, Path]],
+        show_progress: bool = False,
+        max_concurrent: int = 10
+    ) -> List[int]:
+        """
+        Save multiple contents to files concurrently.
+        
+        Args:
+            contents_and_paths: List of (content, destination_path) tuples
+            show_progress: Whether to show overall progress
+            max_concurrent: Maximum concurrent save operations
+            
+        Returns:
+            List of bytes written for each file
+            
+        Raises:
+            DownloadError: If any save operation fails
+        """
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def save_with_semaphore(
+            content: bytes, 
+            path: Path
+        ) -> int:
+            async with semaphore:
+                return await self.save_content(
+                    content, path, show_progress = False
+                )
+        
+        # Create tasks for all save operations
+        tasks = [
+            save_with_semaphore(content, path)
+            for content, path in contents_and_paths
+        ]
+        
+        # Execute with optional progress tracking
+        if show_progress:
+            results = []
+            progress_bar = async_tqdm(
+                total = len(tasks),
+                desc = "Saving files",
+                unit = "file"
+            )
+            
+            for coro in asyncio.as_completed(tasks):
+                result = await coro
+                results.append(result)
+                progress_bar.update(1)
+            
+            progress_bar.close()
+            return results
+        else:
+            return await asyncio.gather(*tasks)
+    
+    async def cleanup_temp_files(
+        self, 
+        directory: Path, 
+        pattern: str = "*.tmp"
+    ) -> int:
+        """
+        Clean up temporary files in a directory.
+        
+        Args:
+            directory: Directory to clean
+            pattern: File pattern to match (default: *.tmp)
+            
+        Returns:
+            Number of files cleaned up
+        """
+
+        if not await self.directory_exists(directory):
+            return 0
+        
+        try:
+            temp_files = await asyncio.to_thread(
+                lambda: list(directory.glob(pattern))
+            )
+            
+            cleanup_tasks = [
+                self.delete_file(temp_file) 
+                for temp_file in temp_files
+            ]
+            
+            results = await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+            
+            # Count successful deletions
+            cleaned_count = sum(
+                1 for result in results 
+                if isinstance(result, bool) and result
+            )
+            
+            logger.info(
+                f"Cleaned up {cleaned_count} temporary files from {directory}"
+            )
+            return cleaned_count
+            
+        except Exception as e:
+            logger.error(f"Error during cleanup of {directory}: {e}")
+            return 0

@@ -5,8 +5,7 @@ Engine for filtering repository content based on flexible criteria.
 
 import fnmatch
 import re
-from pathlib import Path
-from typing import List, Set, Optional
+from typing import List
 from dataclasses import dataclass
 
 from ..models import GitHubFile, FilterCriteria

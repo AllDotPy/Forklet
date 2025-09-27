@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Callable
 from urllib.parse import urlparse
 
 
@@ -209,6 +209,7 @@ class DownloadRequest:
     create_destination: bool = True
     preserve_structure: bool = True
     extract_archives: bool = True
+    show_progress_bars: bool = True
     
     # Performance options
     max_concurrent_downloads: int = 5
@@ -241,7 +242,7 @@ class DownloadRequest:
 
 
 ####
-##      FFILE DOWNLOAD MODEL
+##      FILE DOWNLOAD MODEL
 #####
 @dataclass
 class FileDownloadInfo:
@@ -381,6 +382,20 @@ class DownloadResult:
                 and self.progress.downloaded_bytes > 0
             ):
                 self.average_speed = self.progress.downloaded_bytes / self.total_download_time
+
+
+####
+##      DOWNLOAD CONFIGURATION MODEL
+#####
+@dataclass
+class DownloadConfig:
+    """Configuration for file downloads."""
+    
+    chunk_size: int = 8192
+    timeout: int = 30
+    max_retries: int = 3
+    show_progress: bool = False
+    progress_callback: Optional[Callable[[int, int], None]] = None
 
 
 ####

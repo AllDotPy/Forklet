@@ -129,10 +129,17 @@ def retry_on_error(max_retries: int = 3) -> Callable:
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
-                except (RateLimitError, httpx.RequestError, ConnectionError) as e:
+                except (
+                    RateLimitError, 
+                    httpx.RequestError, 
+                    ConnectionError
+                ) as e:
+                    
                     last_exception = e
                     if attempt < max_retries:
-                        logger.warning(f"Retry {attempt + 1}/{max_retries} after error: {e}")
+                        logger.warning(
+                            f"Retry {attempt + 1}/{max_retries} after error: {e}"
+                        )
                         continue
                     raise
                 except Exception as e:

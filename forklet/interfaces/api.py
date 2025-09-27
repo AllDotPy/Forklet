@@ -57,7 +57,7 @@ class GitHubDownloader:
             self.github_service, self.download_service
         )
     
-    def get_repository_info(self, owner: str, repo: str) -> RepositoryInfo:
+    async def get_repository_info(self, owner: str, repo: str) -> RepositoryInfo:
         """
         Get information about a GitHub repository.
         
@@ -73,9 +73,14 @@ class GitHubDownloader:
             AuthenticationError: If authentication fails
         """
 
-        return self.github_service.get_repository_info(owner, repo)
+        return await self.github_service.get_repository_info(owner, repo)
     
-    def resolve_reference(self, owner: str, repo: str, ref: str) -> GitReference:
+    async def resolve_reference(
+        self, 
+        owner: str, 
+        repo: str, 
+        ref: str
+    ) -> GitReference:
         """
         Resolve a Git reference to a specific commit SHA.
         
@@ -91,9 +96,9 @@ class GitHubDownloader:
             ValueError: If reference cannot be resolved
         """
 
-        return self.github_service.resolve_reference(owner, repo, ref)
+        return await self.github_service.resolve_reference(owner, repo, ref)
     
-    def download(
+    async def download(
         self,
         owner: str,
         repo: str,
@@ -130,8 +135,8 @@ class GitHubDownloader:
 
         try:
             # Get repository information
-            repo_info = self.get_repository_info(owner, repo)
-            git_ref = self.resolve_reference(owner, repo, ref)
+            repo_info = await self.get_repository_info(owner, repo)
+            git_ref = await self.resolve_reference(owner, repo, ref)
             
             # Create filter criteria
             filters = FilterCriteria(
@@ -155,7 +160,7 @@ class GitHubDownloader:
             )
             
             # Execute download
-            result = self.orchestrator.execute_download(request)
+            result = await self.orchestrator.execute_download(request)
             
             return result
             
@@ -163,7 +168,7 @@ class GitHubDownloader:
             logger.error(f"Download failed: {e}")
             raise
     
-    def download_directory(
+    async def download_directory(
         self,
         owner: str,
         repo: str,
@@ -193,7 +198,7 @@ class GitHubDownloader:
             include_patterns=[f"{directory_path}/**"]
         )
         
-        return self.download(
+        return await self.download(
             owner = owner,
             repo = repo,
             destination = destination,
@@ -203,7 +208,7 @@ class GitHubDownloader:
             config = config
         )
     
-    def download_file(
+    async def download_file(
         self,
         owner: str,
         repo: str,
@@ -233,7 +238,7 @@ class GitHubDownloader:
             include_patterns = [file_path]
         )
         
-        return self.download(
+        return await self.download(
             owner = owner,
             repo = repo,
             destination = destination,
@@ -243,7 +248,7 @@ class GitHubDownloader:
             config = config
         )
     
-    def get_rate_limit_info(self) -> Dict[str, Any]:
+    async def get_rate_limit_info(self) -> Dict[str, Any]:
         """
         Get current GitHub API rate limit information.
         
@@ -251,24 +256,24 @@ class GitHubDownloader:
             Dictionary with rate limit details
         """
 
-        return self.github_service.get_rate_limit_info()
+        return await self.github_service.get_rate_limit_info()
     
-    def cancel_current_download(self) -> None:
+    async def cancel_current_download(self) -> None:
         """Cancel the currently running download operation."""
 
-        self.orchestrator.cancel()
+        await self.orchestrator.cancel()
     
-    def pause_current_download(self) -> None:
+    async def pause_current_download(self) -> None:
         """Pause the currently running download operation."""
 
-        self.orchestrator.pause()
+        await self.orchestrator.pause()
     
-    def resume_current_download(self) -> None:
+    async def resume_current_download(self) -> None:
         """Resume a paused download operation."""
 
-        self.orchestrator.resume()
+        await self.orchestrator.resume()
     
-    def get_download_progress(self) -> Optional[ProgressInfo]:
+    async def get_download_progress(self) -> Optional[ProgressInfo]:
         """
         Get progress information for the current download.
         
@@ -276,4 +281,4 @@ class GitHubDownloader:
             ProgressInfo object, or None if no download in progress
         """
 
-        return self.orchestrator.get_current_progress()
+        return await self.orchestrator.get_current_progress()

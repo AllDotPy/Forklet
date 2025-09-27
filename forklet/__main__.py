@@ -1,6 +1,7 @@
 import sys
 from typing import Optional, List
 import logging
+import asyncio
 
 import click
 
@@ -38,6 +39,7 @@ def cli(ctx, verbose: bool, token: Optional[str]):
 @click.option('--exclude-extensions', multiple=True, help='Excluded file extensions')
 @click.option('--include-hidden', is_flag=True, help='Include hidden files')
 @click.option('--no-binary', is_flag=True, help='Exclude binary files')
+@click.option('--no-progress', is_flag=True, help='Download with no progress')
 @click.option('--target-paths', multiple=True, help='Specific paths to download')
 @click.option('--strategy', '-s', default='individual',
               type=click.Choice(['archive', 'individual', 'git_clone', 'sparse']),
@@ -61,7 +63,8 @@ def download(
     target_paths: List[str], 
     strategy: str,
     concurrent: int, 
-    overwrite: bool
+    overwrite: bool,
+    no_progress: bool
 ):
     """
     Download files from a GitHub repository.
@@ -87,18 +90,23 @@ def download(
     
     # Get authentication token from context or environment
     token = ctx.obj.get('token')
+
+    async def run_download():
     
-    # Execute download
-    app.execute_download(
-        repository = repository,
-        destination = destination,
-        ref = ref,
-        filters = filters,
-        strategy = DownloadStrategy(strategy),
-        token = token,
-        concurrent = concurrent,
-        overwrite = overwrite
-    )
+        # Execute download
+        await app.execute_download(
+            repository = repository,
+            destination = destination,
+            ref = ref,
+            filters = filters,
+            strategy = DownloadStrategy(strategy),
+            token = token,
+            concurrent = concurrent,
+            overwrite = overwrite,
+            progress = not no_progress
+        )
+
+    asyncio.run(run_download())
 
 
 @cli.command()
@@ -115,7 +123,7 @@ def info(ctx, repository: str, ref: str):
         owner, repo_name = app.parse_repository_string(repository)
         
         # Get repository info
-        repo_info = app.github_service.get_repository_info(owner, repo_name)
+        repo_info =   app.github_service.get_repository_info(owner, repo_name)
         git_ref = app.github_service.resolve_reference(owner, repo_name, ref)
         
         # Display information
@@ -135,6 +143,7 @@ def info(ctx, repository: str, ref: str):
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)
 
-####    MAIN ENTRYpoint fOR the FORKLET CLI
+
+####    MAIN ENTRYPOINT FOR THE FORKLET CLI
 def main():
     cli()
