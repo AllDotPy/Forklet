@@ -142,6 +142,34 @@ def test_retry_on_error_retries_retryables(monkeypatch):
     assert calls.n == 3
 
 
+def test_retry_on_error_retries_on_rate_limit_error():
+    calls = SimpleNamespace(n=0)
+
+    @retry_on_error(max_retries=2)
+    def fn():
+        calls.n += 1
+        if calls.n < 3:
+            raise RateLimitError("hit rate limit")
+        return "ok"
+
+    assert fn() == "ok"
+    assert calls.n == 3
+
+
+def test_retry_on_error_retries_on_connection_error():
+    calls = SimpleNamespace(n=0)
+
+    @retry_on_error(max_retries=2)
+    def fn():
+        calls.n += 1
+        if calls.n < 3:
+            raise ConnectionError("network down")
+        return "ok"
+
+    assert fn() == "ok"
+    assert calls.n == 3
+
+
 def test_retry_on_error_stops_after_max_and_raises(monkeypatch):
     calls = SimpleNamespace(n=0)
 
