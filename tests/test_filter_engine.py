@@ -7,21 +7,21 @@ def make_file(path: str, size: int = 100, file_type: str = 'blob') -> GitHubFile
     return GitHubFile(path=path, type=file_type, size=size)
 
 
-def test_include_pattern_matches() -> None:
+def test_include_pattern_matches():
     """Scenario: Path matching with include_patterns"""
     criteria = FilterCriteria(include_patterns=['*.py'])
     assert criteria.matches_path('main.py') is True
     assert criteria.matches_path('README.md') is False
 
 
-def test_exclude_pattern_blocks_path() -> None:
+def test_exclude_pattern_blocks_path():
     """Scenario: Path exclusion with exclude_patterns"""
     criteria = FilterCriteria(exclude_patterns=['*.md'])
     assert criteria.matches_path('script.py') is True
     assert criteria.matches_path('docs/README.md') is False
 
 
-def test_hidden_files_handling() -> None:
+def test_hidden_files_handling():
     """Scenario: Handling of hidden files (with include_hidden=True/False)"""
     hidden_path = '.github/workflows/ci.yml'
     visible_criteria = FilterCriteria(include_hidden=False)
@@ -31,7 +31,7 @@ def test_hidden_files_handling() -> None:
     assert hidden_criteria.matches_path(hidden_path) is True
 
 
-def test_file_extension_filters() -> None:
+def test_file_extension_filters():
     """Scenario: File extension filtering (file_extensions and excluded_extensions)"""
     criteria = FilterCriteria(
         file_extensions={'.py'}, excluded_extensions={'.log'})
@@ -40,7 +40,7 @@ def test_file_extension_filters() -> None:
     assert criteria.matches_path('logs/error.log') is False
 
 
-def test_target_paths_enforcement() -> None:
+def test_target_paths_enforcement():
     """Scenario: target_paths enforcement"""
     criteria = FilterCriteria(
         target_paths=['docs/'], include_patterns=['*.md'])
@@ -55,7 +55,7 @@ def test_target_paths_enforcement() -> None:
     assert engine.should_include_file(off_target_file) is False
 
 
-def test_combined_filters_in_engine() -> None:
+def test_combined_filters_in_engine():
     """Scenario: Combination of filters (include + exclude + size constraints)"""
     criteria = FilterCriteria(
         include_patterns=["src/*.py"],
