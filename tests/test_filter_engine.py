@@ -12,7 +12,6 @@ def test_include_pattern_matches() -> None:
     criteria = FilterCriteria(include_patterns=['*.py'])
     assert criteria.matches_path('main.py') is True
     assert criteria.matches_path('README.md') is False
-    return None
 
 
 def test_exclude_pattern_blocks_path() -> None:
@@ -20,7 +19,6 @@ def test_exclude_pattern_blocks_path() -> None:
     criteria = FilterCriteria(exclude_patterns=['*.md'])
     assert criteria.matches_path('script.py') is True
     assert criteria.matches_path('docs/README.md') is False
-    return None
 
 
 def test_hidden_files_handling() -> None:
@@ -31,7 +29,6 @@ def test_hidden_files_handling() -> None:
 
     hidden_criteria = FilterCriteria(include_hidden=True)
     assert hidden_criteria.matches_path(hidden_path) is True
-    return None
 
 
 def test_file_extension_filters() -> None:
@@ -41,7 +38,6 @@ def test_file_extension_filters() -> None:
     assert criteria.matches_path('src/app.py') is True
     assert criteria.matches_path('src/app.txt') is False
     assert criteria.matches_path('logs/error.log') is False
-    return None
 
 
 def test_target_paths_enforcement() -> None:
@@ -57,7 +53,6 @@ def test_target_paths_enforcement() -> None:
 
     assert engine.should_include_file(target_file) is True
     assert engine.should_include_file(off_target_file) is False
-    return None
 
 
 def test_combined_filters_in_engine() -> None:
@@ -92,10 +87,3 @@ def test_combined_filters_in_engine() -> None:
     }
     assert result.total_files == len(files)
     assert result.filtered_files == 1
-    return None
-
-
-if __name__ == '__main__':
-    import sys
-    import pytest
-    sys.exit(pytest.main([__file__]))
