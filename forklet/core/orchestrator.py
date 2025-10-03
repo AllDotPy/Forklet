@@ -5,7 +5,7 @@ with concurrency and error handling.
 
 import asyncio
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Set
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -83,7 +83,18 @@ class DownloadOrchestrator:
         self.download_service = download_service
         self.max_concurrent_downloads = max_concurrent_downloads
         self._is_cancelled = False
+        self._is_paused = False
         self._semaphore = asyncio.Semaphore(max_concurrent_downloads)
+        
+        # State tracking for control methods
+        self._current_result: Optional[DownloadResult] = None
+        self._active_tasks: List[asyncio.Task] = []
+        self._pause_event = asyncio.Event()
+        self._cancellation_event = asyncio.Event()
+        self._resume_event = asyncio.Event()
+        self._paused_files: List[str] = []
+        self._completed_files: Set[str] = set()
+        self._failed_files: Dict[str, str] = {}
     
     async def execute_download(self, request: DownloadRequest) -> DownloadResult:
         """
@@ -138,13 +149,19 @@ class DownloadOrchestrator:
             if request.create_destination:
                 await self.download_service.ensure_directory(request.destination)
             
-            # Create download result
+            # Create download result and set as current
             result = DownloadResult(
                 request=request,
                 status=DownloadStatus.IN_PROGRESS,
                 progress=progress,
                 started_at=datetime.now()
             )
+            self._current_result = result
+            
+            # Reset state tracking
+            self._completed_files.clear()
+            self._failed_files.clear()
+            self._paused_files.clear()
             
             # Download files concurrently with asyncio
             downloaded_files, failed_files = await self._download_files_concurrently(
@@ -178,7 +195,12 @@ class DownloadOrchestrator:
                 started_at = datetime.now(),
                 completed_at = datetime.now()
             )
+            
             return result
+            
+        finally:
+            # Clean up state regardless of success or failure
+            self.reset_state()
     
     async def _download_files_concurrently(
         self,
@@ -202,30 +224,55 @@ class DownloadOrchestrator:
         downloaded_files = []
         failed_files = {}
         
+        # Filter out already completed files if resuming
+        remaining_files = [file for file in files if file.path not in self._completed_files]
+        
         # Create download tasks with semaphore control
         tasks = [
             self._download_single_file_with_semaphore(file, request, progress, stats)
-            for file in files
+            for file in remaining_files
         ]
         
-        # Execute all tasks concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Store active tasks for cancellation
+        self._active_tasks = tasks
         
-        # Process results
-        for file, result in zip(files, results):
-            if self._is_cancelled:
-                break
-                
-            if isinstance(result, Exception):
-                stats.failed_files += 1
-                failed_files[file.path] = str(result)
-                logger.error(f"Failed to download {file.path}: {result}")
-            elif result is not None:
-                downloaded_files.append(file.path)
-                stats.downloaded_files += 1
-                stats.total_bytes += result
-            else:
-                stats.skipped_files += 1
+        try:
+            # Execute all tasks concurrently
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process results
+            for file, result in zip(remaining_files, results):
+                if self._cancellation_event.is_set():
+                    if file.path not in self._completed_files and file.path not in failed_files:
+                        self._paused_files.append(file.path)
+                    break
+                    
+                if isinstance(result, Exception):
+                    stats.failed_files += 1
+                    failed_files[file.path] = str(result)
+                    self._failed_files[file.path] = str(result)
+                    logger.error(f"Failed to download {file.path}: {result}")
+                elif result is not None:
+                    downloaded_files.append(file.path)
+                    self._completed_files.add(file.path)
+                    stats.downloaded_files += 1
+                    stats.total_bytes += result
+                else:
+                    stats.skipped_files += 1
+            
+            # Add previously completed files to downloaded_files
+            downloaded_files.extend(self._completed_files)
+            
+        except asyncio.CancelledError:
+            logger.info("Download operation was cancelled")
+            # Ensure all tasks are properly cancelled
+            for task in self._active_tasks:
+                if not task.done():
+                    task.cancel()
+            raise
+        finally:
+            # Clear active tasks
+            self._active_tasks.clear()
         
         return downloaded_files, failed_files
     
@@ -273,8 +320,15 @@ class DownloadOrchestrator:
         Raises:
             Exception: If download fails
         """
-
-        if self._is_cancelled:
+        
+        # Check for cancellation
+        if self._cancellation_event.is_set():
+            return None
+            
+        # Check for pause before starting
+        await self._wait_for_resume()
+        
+        if self._cancellation_event.is_set():
             return None
         
         try:
@@ -292,6 +346,12 @@ class DownloadOrchestrator:
             # Download file content
             content = await self.github_service.get_file_content(file.download_url)
             stats.api_calls += 1
+            
+            # Check again for pause after API call
+            await self._wait_for_resume()
+            
+            if self._cancellation_event.is_set():
+                return None
             
             # Save content to file
             bytes_written = await self.download_service.save_content(
@@ -311,31 +371,138 @@ class DownloadOrchestrator:
             logger.error(f"Error downloading {file.path}: {e}")
             raise
     
-    def cancel(self) -> None:
-        """Cancel the current download operation."""
-
+    async def _wait_for_resume(self) -> None:
+        """
+        Wait for resume event if paused, or return immediately if not paused.
+        This method handles the pause/resume mechanism.
+        """
+        if self._is_paused and not self._cancellation_event.is_set():
+            logger.debug("Download operation is paused, waiting for resume...")
+            await self._pause_event.wait()
+            logger.debug("Download operation resumed")
+    
+    def cancel(self) -> Optional[DownloadResult]:
+        """
+        Cancel the current download operation.
+        
+        Returns:
+            Current DownloadResult marked as cancelled, or None if no active download
+        """
+        if self._current_result is None:
+            logger.warning("No active download to cancel")
+            return None
+            
         self._is_cancelled = True
+        
+        # Signal cancellation to all pending tasks
+        self._cancellation_event.set()
+        
+        # Cancel all active tasks
+        for task in self._active_tasks:
+            if not task.done():
+                task.cancel()
+        
+        # Update the current result status
+        self._current_result.status = DownloadStatus.CANCELLED
+        self._current_result.completed_at = datetime.now()
+        
         logger.info("Download cancelled by user")
+        return self._current_result
     
-    async def pause(self) -> None:
-        """Pause the current download operation."""
-
-        # Implementation would track state for resumable downloads
+    async def pause(self) -> Optional[DownloadResult]:
+        """
+        Pause the current download operation.
+        
+        Returns:
+            Current DownloadResult marked as paused, or None if no active download
+        """
+        if self._current_result is None:
+            logger.warning("No active download to pause")
+            return None
+            
+        if self._is_paused:
+            logger.warning("Download is already paused")
+            return self._current_result
+            
+        self._is_paused = True
+        
+        # Clear the pause event to block further downloads
+        self._pause_event.clear()
+        
+        # Update the current result status
+        self._current_result.status = DownloadStatus.PAUSED
+        
         logger.info("Download paused")
+        return self._current_result
     
-    async def resume(self) -> None:
-        """Resume a paused download operation."""
-
-        # Implementation would resume from saved state
+    async def resume(self) -> Optional[DownloadResult]:
+        """
+        Resume a paused download operation.
+        
+        Returns:
+            Current DownloadResult marked as resuming, or None if no paused download
+        """
+        if self._current_result is None:
+            logger.warning("No active download to resume")
+            return None
+            
+        if not self._is_paused:
+            logger.warning("Download is not paused")
+            return self._current_result
+            
+        self._is_paused = False
+        
+        # Reset the pause event to allow downloads to continue
+        self._pause_event.set()
+        
+        # Update the current result status
+        self._current_result.status = DownloadStatus.IN_PROGRESS
+        
         logger.info("Download resumed")
+        return self._current_result
     
     def get_current_progress(self) -> Optional[ProgressInfo]:
         """
         Get current progress information.
         
         Returns:
-            Current ProgressInfo, or None if no download in progress
+            Current ProgressInfo if a download is in progress, None otherwise
         """
+        if self._current_result is None:
+            return None
+            
+        # Return the current progress with updated statistics
+        progress = self._current_result.progress
         
-        # Implementation would track progress state
-        return None
+        # Update progress with current state if we have tracking data
+        if hasattr(self, '_completed_files'):
+            progress.downloaded_files = len(self._completed_files)
+        
+        # Create a progress info snapshot with current state
+        current_progress = ProgressInfo(
+            total_files=progress.total_files,
+            downloaded_files=progress.downloaded_files,
+            total_bytes=progress.total_bytes,
+            downloaded_bytes=progress.downloaded_bytes,
+            current_file=progress.current_file
+        )
+        
+        return current_progress
+    
+    def reset_state(self) -> None:
+        """
+        Reset the orchestrator state after a download completes.
+        This should be called to clean up state after successful completion or failure.
+        """
+        self._current_result = None
+        self._active_tasks.clear()
+        self._is_cancelled = False
+        self._is_paused = False
+        self._paused_files.clear()
+        self._completed_files.clear()
+        self._failed_files.clear()
+        
+        # Reset events
+        self._cancellation_event.clear()
+        self._pause_event.set()  # Set to allow downloads initially
+        self._resume_event.clear()
