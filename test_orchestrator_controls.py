@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from unittest.mock import Mock
 from forklet.core.orchestrator import DownloadOrchestrator
 
 async def test_control_methods():
@@ -63,10 +64,3 @@ async def test_control_methods():
     print("SUCCESS: Enhancement completed successfully!")
     
     return True
-
-if __name__ == "__main__":
-    # Add missing import for Mock
-    from unittest.mock import Mock
-    # Run the test
-    success = asyncio.run(test_control_methods())
-    print(f"Test {'PASSED' if success else 'FAILED'}")
