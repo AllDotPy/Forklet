@@ -183,9 +183,6 @@ class DownloadOrchestrator:
                 f"{len(failed_files)} failed, {stats.total_bytes} bytes"
             )
             
-            # Clean up state now that download is complete
-            self.reset_state()
-            
             return result
             
         except Exception as e:
@@ -199,10 +196,11 @@ class DownloadOrchestrator:
                 completed_at = datetime.now()
             )
             
-            # Clean up state on failure
-            self.reset_state()
-            
             return result
+            
+        finally:
+            # Clean up state regardless of success or failure
+            self.reset_state()
     
     async def _download_files_concurrently(
         self,
