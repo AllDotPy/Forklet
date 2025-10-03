@@ -85,7 +85,7 @@ def handle_api_error(func: Callable) -> Callable:
             if e.status == 403 and 'rate limit' in str(e).lower():
                 raise RateLimitError("GitHub API rate limit exceeded", e) from e
 
-            elif e.status == 401 or e.status == 403:
+            elif e.status == 401:
                 raise AuthenticationError("Authentication failed", e) from e
 
             elif e.status == 404:

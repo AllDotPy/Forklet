@@ -1,5 +1,3 @@
-# tests/infrastructure/test_rate_limiter.py
-
 import time
 import random
 import asyncio
@@ -12,7 +10,7 @@ import pytest
 from forklet.infrastructure.rate_limiter import RateLimiter, RateLimitInfo
 
 # Mark all tests in this file as asyncio
-pytestmark = pytest.mark.asyncio
+# pytestmark = pytest.mark.asyncio
 
 
 ## 1. RateLimitInfo Helper Class Tests
@@ -66,7 +64,7 @@ def test_ratelimiter_initialization():
 
 ## 3. Update from Headers Tests
 # ------------------------------
-
+@pytest.mark.asyncio
 async def test_update_rate_limit_info_sets_values_correctly():
     """Test that rate limit info is correctly parsed from headers."""
     rl = RateLimiter()
@@ -89,6 +87,7 @@ async def test_update_rate_limit_info_sets_values_correctly():
     assert not info.is_exhausted
 
 
+@pytest.mark.asyncio
 async def test_update_rate_limit_increments_consecutive_limits():
     """Test that _consecutive_limits is handled correctly."""
     rl = RateLimiter()
@@ -107,7 +106,7 @@ async def test_update_rate_limit_increments_consecutive_limits():
 
 ## 4. Acquire Logic and Wait Behavior Tests
 # ------------------------------------------
-
+@pytest.mark.asyncio
 @patch('asyncio.sleep', new_callable=AsyncMock)
 async def test_acquire_waits_when_primary_rate_limit_exhausted(mock_sleep):
     """Test that acquire() waits for reset_in_seconds when exhausted."""
@@ -127,7 +126,7 @@ async def test_acquire_waits_when_primary_rate_limit_exhausted(mock_sleep):
         # Check that it slept for the primary rate limit duration
         mock_sleep.assert_any_call(15.0)
 
-
+@pytest.mark.asyncio
 @patch('asyncio.sleep', new_callable=AsyncMock)
 async def test_acquire_uses_adaptive_delay(mock_sleep):
     """Test that acquire() uses the calculated adaptive delay."""
@@ -145,9 +144,10 @@ async def test_acquire_uses_adaptive_delay(mock_sleep):
         # The first call to time.time() is at the start of acquire(),
         # the second is for _last_request. The delay calculation uses the first one.
         # Expected delay is around 1.0 seconds.
+        print(mock_sleep.call_args[0][0])
         assert mock_sleep.call_args[0][0] > 0.5
 
-
+@pytest.mark.asyncio
 async def test_acquire_updates_last_request_time():
     """Test that acquire() correctly updates the _last_request timestamp."""
     rl = RateLimiter()
@@ -161,7 +161,7 @@ async def test_acquire_updates_last_request_time():
 
 ## 5. Task Safety Test
 # ---------------------
-
+@pytest.mark.asyncio
 async def test_update_rate_limit_info_is_task_safe():
     """Ensure concurrent updates do not corrupt the RateLimiter's state."""
     rl = RateLimiter()

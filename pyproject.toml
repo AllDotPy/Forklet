@@ -23,18 +23,19 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "black", 
+    "black",
     "mypy",
-    "twine",
+    "twine>=6.2.0",
     "uv",
     "build",
-    "pytest>=8.4.0", 
+    "pytest>=8.4.0",
     "mkdocs>=1.6.1",
     "setuptools>=80.8.0",
     "mkdocs-material>=9.6.14",
     "mkdocs-static-i18n>=1.3.0",
+    "pytest-asyncio>=1.2.0",
 ]
 
 [project.scripts]
@@ -46,6 +47,11 @@ Repository = "https://github.com/AllDotPy/Forklet"
 # Documentation = "https://alldotpy.github.io/Forklet"
 Tracker = "https://github.com/AllDotPy/Forklet/issues"
 
+[tool.pytest.ini_options]
+markers = [
+    "asyncio: asyncio mark",
+]
+
 [tool.setuptools]
 packages = ["forklet"]
 
@@ -53,7 +59,3 @@ packages = ["forklet"]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[dependency-groups]
-dev = [
-    "twine>=6.2.0",
-]

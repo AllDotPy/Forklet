@@ -40,7 +40,7 @@ def cli(ctx, verbose: bool, token: Optional[str]):
 @click.option('--exclude-extensions', multiple=True, help='Excluded file extensions')
 @click.option('--include-hidden', is_flag=True, help='Include hidden files')
 @click.option('--no-binary', is_flag=True, help='Exclude binary files')
-@click.option('--no-progress', is_flag=True, help='Download with no progress')
+@click.option('--no-progress', is_flag=False, help='Download with no progress')
 @click.option('--target-paths', multiple=True, help='Specific paths to download')
 @click.option('--strategy', '-s', default='individual',
               type=click.Choice(['archive', 'individual', 'git_clone', 'sparse']),
