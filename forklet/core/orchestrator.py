@@ -270,6 +270,7 @@ class DownloadOrchestrator:
                 if not task.done():
                     task.cancel()
             raise
+        
         finally:
             # Clear active tasks
             self._active_tasks.clear()

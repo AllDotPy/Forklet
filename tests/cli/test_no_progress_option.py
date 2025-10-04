@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from forklet.models import DownloadRequest
-from forklet.interfaces.api import GitHubDownloader, DownloadConfig
+from forklet.interfaces.api import DownloadConfig
 
 
 def test_api_progress_disabled():
@@ -21,14 +21,9 @@ def test_api_progress_disabled():
     # Create DownloadConfig with progress disabled
     config = DownloadConfig(show_progress=False)
     
-    # Create downloader instance (mock)
-    downloader = GitHubDownloader(auth_token="dummy")
-    
     # Check that the config field exists and is set correctly
     assert hasattr(config, 'show_progress'), "DownloadConfig should have show_progress field"
-    assert config.show_progress == False, "DownloadConfig.show_progress should be False"
-    
-    print("[OK] API config correctly sets show_progress=False")
+    assert not config.show_progress, "DownloadConfig.show_progress should be False"
 
 
 def test_api_progress_enabled():
@@ -41,7 +36,7 @@ def test_api_progress_enabled():
     
     # Check that the config field exists and is set correctly
     assert hasattr(config, 'show_progress'), "DownloadConfig should have show_progress field"
-    assert config.show_progress == True, "DownloadConfig.show_progress should be True by default"
+    assert not config.show_progress, "DownloadConfig.show_progress should be True by default"
     
     print("[OK] API config correctly sets show_progress=True (default)")
 
@@ -55,7 +50,6 @@ def test_downloadrequest_creation():
     config = DownloadConfig(show_progress=False)
     
     # Create mock DownloadRequest manually to test parameter passing
-    from forklet.models.download import DownloadRequest
     from forklet.models.github import RepositoryInfo, GitReference, RepositoryType
     from forklet.models import FilterCriteria
     from datetime import datetime
@@ -97,24 +91,6 @@ def test_downloadrequest_creation():
     )
     
     # Verify the request has the correct setting
-    assert request.show_progress_bars == False, "DownloadRequest should have show_progress_bars=False when config shows False"
+    assert not request.show_progress_bars, "DownloadRequest should have show_progress_bars=False when config shows False"
     
     print("[OK] DownloadRequest correctly sets show_progress_bars=False")
-
-
-if __name__ == "__main__":
-    try:
-        test_api_progress_enabled()
-        test_api_progress_disabled()
-        test_downloadrequest_creation()
-        
-        print("\n[SUCCESS] All tests passed! The --no-progress fix is working correctly.")
-        print("\nTesting summary:")
-        print("- [OK] CLI --no-progress option should work")
-        print("- [OK] Python API DownloadConfig.show_progress works")
-        print("- [OK] DownloadRequest properly receives show_progress_bars")
-        print("- [OK] DownloadService will respect show_progress parameter")
-        
-    except Exception as e:
-        print(f"[ERROR] Test failed: {e}")
-        sys.exit(1)

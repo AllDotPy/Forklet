@@ -85,7 +85,7 @@ def handle_api_error(func: Callable) -> Callable:
             if e.status == 403 and 'rate limit' in str(e).lower():
                 raise RateLimitError("GitHub API rate limit exceeded", e) from e
 
-            elif e.status == 401:
+            elif e.status == 401 or e.status == 403:
                 raise AuthenticationError("Authentication failed", e) from e
 
             elif e.status == 404:
@@ -142,8 +142,10 @@ def retry_on_error(max_retries: int = 3) -> Callable:
                         )
                         continue
                     raise
+
                 except Exception as e:
                     # Don't retry on other errors
+                    logger.error(f"Non-retryable error: {e}")
                     raise
             
             raise last_exception or Exception("All retry attempts failed")

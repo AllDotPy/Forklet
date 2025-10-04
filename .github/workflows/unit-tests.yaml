@@ -22,8 +22,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip pip-tools
           pip install pytest pytest-asyncio
+
+      - name: Generate and Install requirements
+        run: |
+          pip-compile --generate-hashes --output-file=requirements.txt pyproject.toml
+          pip install -r requirements.txt
 
       - name: Run tests
         run: pytest

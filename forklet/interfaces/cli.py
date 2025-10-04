@@ -203,7 +203,9 @@ class ForkletCLI:
             click.echo("✅ Download completed successfully!")
             click.echo(f"   📁 Files: {len(result.downloaded_files)} downloaded")
             click.echo(f"   💾 Size: {result.progress.downloaded_bytes} bytes")
-            # click.echo(f"   ⚡ Speed: {result.average_speed:.2f} bytes/sec")
+            
+            if result.average_speed is not None:
+                click.echo(f"   ⚡ Speed: {result.average_speed:.2f} bytes/sec")
             
             if result.skipped_files:
                 click.echo(f"   ⏭️  Skipped: {len(result.skipped_files)} files")
