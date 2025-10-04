@@ -5,7 +5,6 @@ Python API for Forklet GitHub Repository Downloader.
 
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
-from dataclasses import dataclass
 
 from forklet.core import DownloadOrchestrator
 from forklet.services import GitHubAPIService, DownloadService
