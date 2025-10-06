@@ -13,23 +13,9 @@ from forklet.infrastructure import RateLimiter, RetryManager
 from forklet.infrastructure.logger import logger
 from forklet.models import (
     DownloadRequest, DownloadResult, DownloadStrategy, FilterCriteria,
-    RepositoryInfo, GitReference, ProgressInfo
+    RepositoryInfo, GitReference, ProgressInfo, DownloadConfig
 )
 
-
-
-####
-##      DOWNLOAD CONFIG
-#####
-@dataclass
-class DownloadConfig:
-    """Configuration for API downloads."""
-    
-    max_concurrent_downloads: int = 5
-    chunk_size: int = 8192
-    timeout: int = 300
-    overwrite_existing: bool = False
-    preserve_structure: bool = True
 
 
 ####
