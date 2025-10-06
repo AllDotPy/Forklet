@@ -93,7 +93,3 @@ class TestVerboseLogging:
         
         # Verify logger was configured for DEBUG level
         mock_logger.setLevel.assert_called_with(logging.DEBUG)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])

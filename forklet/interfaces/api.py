@@ -131,21 +131,18 @@ class GitHubDownloader:
         """
 
         try:
-            if self.verbose:
-                logger.debug(f"Starting download for {owner}/{repo}@{ref}")
-                logger.debug(f"Destination: {destination}")
-                logger.debug(f"Strategy: {strategy}")
-                logger.debug(f"Include patterns: {include_patterns}")
-                logger.debug(f"Exclude patterns: {exclude_patterns}")
+            logger.debug(f"Starting download for {owner}/{repo}@{ref}")
+            logger.debug(f"Destination: {destination}")
+            logger.debug(f"Strategy: {strategy}")
+            logger.debug(f"Include patterns: {include_patterns}")
+            logger.debug(f"Exclude patterns: {exclude_patterns}")
             
             # Get repository information
             repo_info = await self.get_repository_info(owner, repo)
-            if self.verbose:
-                logger.debug(f"Repository info: {repo_info.full_name}, size: {repo_info.size}KB")
+            logger.debug(f"Repository info: {repo_info.full_name}, size: {repo_info.size}KB")
             
             git_ref = await self.resolve_reference(owner, repo, ref)
-            if self.verbose:
-                logger.debug(f"Resolved reference {ref} to {git_ref.ref_type}: {git_ref.sha}")
+            logger.debug(f"Resolved reference {ref} to {git_ref.ref_type}: {git_ref.sha}")
             
             # Create filter criteria
             filters = FilterCriteria(
@@ -170,15 +167,13 @@ class GitHubDownloader:
             )
             
             # Execute download
-            if self.verbose:
-                logger.debug("Starting download execution...")
+            logger.debug("Starting download execution...")
             
             result = await self.orchestrator.execute_download(request)
             
-            if self.verbose:
-                logger.debug(f"Download completed: {len(result.downloaded_files)} files, "
-                           f"{len(result.failed_files)} failures, "
-                           f"{result.progress.downloaded_bytes} bytes")
+            logger.debug(f"Download completed: {len(result.downloaded_files)} files, "
+                       f"{len(result.failed_files)} failures, "
+                       f"{result.progress.downloaded_bytes} bytes")
             
             return result
             
