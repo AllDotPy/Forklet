@@ -146,6 +146,36 @@ def info(ctx, repository: str, ref: str):
 
 
 @cli.command()
+def status():
+    """Show current download status and progress"""
+    
+    try:
+        app = ForkletCLI()
+        app.initialize_services()
+        
+        # Check if there's an active download
+        progress = app.orchestrator.get_current_progress() if hasattr(app, 'orchestrator') else None
+        
+        if progress is None:
+            click.echo("📊 No active downloads")
+        else:
+            click.echo("📊 Current Download Status:")
+            click.echo(f"   📁 Files: {progress.downloaded_files}/{progress.total_files}")
+            click.echo(f"   📊 Progress: {progress.progress_percentage:.1f}%")
+            click.echo(f"   💾 Downloaded: {progress.downloaded_bytes}/{progress.total_bytes} bytes")
+            if progress.current_file:
+                click.echo(f"   📄 Current file: {progress.current_file}")
+            if progress.download_speed > 0:
+                click.echo(f"   ⚡ Speed: {progress.download_speed:.2f} bytes/sec")
+            if progress.eta_seconds:
+                click.echo(f"   ⏱️  ETA: {progress.eta_seconds:.0f} seconds")
+                
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
 def version():
     """Print Forklet version"""
 

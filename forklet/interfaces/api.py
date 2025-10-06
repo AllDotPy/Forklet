@@ -271,30 +271,70 @@ class GitHubDownloader:
 
         return await self.github_service.get_rate_limit_info()
     
-    async def cancel_current_download(self) -> None:
-        """Cancel the currently running download operation."""
-
-        await self.orchestrator.cancel()
+    def cancel_current_download(self) -> Optional[DownloadResult]:
+        """
+        Cancel the currently running download operation.
+        
+        Returns:
+            DownloadResult marked as cancelled, or None if no active download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # Start download in background...
+            >>> result = downloader.cancel_current_download()
+            >>> if result:
+            ...     print(f"Download cancelled: {result.status}")
+        """
+        return self.orchestrator.cancel()
     
-    async def pause_current_download(self) -> None:
-        """Pause the currently running download operation."""
-
-        await self.orchestrator.pause()
+    async def pause_current_download(self) -> Optional[DownloadResult]:
+        """
+        Pause the currently running download operation.
+        
+        Returns:
+            DownloadResult marked as paused, or None if no active download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # Start download in background...
+            >>> result = await downloader.pause_current_download()
+            >>> if result:
+            ...     print(f"Download paused: {result.status}")
+        """
+        return await self.orchestrator.pause()
     
-    async def resume_current_download(self) -> None:
-        """Resume a paused download operation."""
-
-        await self.orchestrator.resume()
+    async def resume_current_download(self) -> Optional[DownloadResult]:
+        """
+        Resume a paused download operation.
+        
+        Returns:
+            DownloadResult marked as resuming, or None if no paused download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # After pausing a download...
+            >>> result = await downloader.resume_current_download()
+            >>> if result:
+            ...     print(f"Download resumed: {result.status}")
+        """
+        return await self.orchestrator.resume()
     
-    async def get_download_progress(self) -> Optional[ProgressInfo]:
+    def get_download_progress(self) -> Optional[ProgressInfo]:
         """
         Get progress information for the current download.
         
         Returns:
             ProgressInfo object, or None if no download in progress
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # During an active download...
+            >>> progress = downloader.get_download_progress()
+            >>> if progress:
+            ...     print(f"Progress: {progress.progress_percentage:.1f}%")
+            ...     print(f"Files: {progress.downloaded_files}/{progress.total_files}")
         """
-
-        return await self.orchestrator.get_current_progress()
+        return self.orchestrator.get_current_progress()
     
     def set_verbose(self, verbose: bool) -> None:
         """
