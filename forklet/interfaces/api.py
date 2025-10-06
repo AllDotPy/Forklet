@@ -3,6 +3,7 @@
 Python API for Forklet GitHub Repository Downloader.
 """
 
+import logging
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 
@@ -14,8 +15,6 @@ from forklet.models import (
     DownloadRequest, DownloadResult, DownloadStrategy, FilterCriteria,
     RepositoryInfo, GitReference, ProgressInfo, DownloadConfig
 )
-
-
 #####
 class GitHubDownloader:
     """
@@ -23,16 +22,27 @@ class GitHubDownloader:
     
     Provides a clean, typed interface for downloading GitHub repository content.
     """
-    
-    def __init__(self, auth_token: Optional[str] = None):
+
+    def __init__(self, auth_token: Optional[str] = None, verbose: bool = False):
         """
         Initialize the downloader with optional authentication.
         
         Args:
             auth_token: GitHub personal access token for authentication
+            verbose: Enable detailed logging and progress information (default: False)
         """
-
+        
+        
+        self.verbose = verbose
         self.auth_token = auth_token
+        
+        # Configure logger based on verbose setting
+        if verbose:
+            logger.setLevel(logging.DEBUG)
+            logger.debug("Verbose logging enabled for GitHubDownloader")
+        else:
+            logger.setLevel(logging.INFO)
+        
         self.rate_limiter = RateLimiter()
         self.retry_manager = RetryManager()
         
@@ -121,9 +131,21 @@ class GitHubDownloader:
         """
 
         try:
+            if self.verbose:
+                logger.debug(f"Starting download for {owner}/{repo}@{ref}")
+                logger.debug(f"Destination: {destination}")
+                logger.debug(f"Strategy: {strategy}")
+                logger.debug(f"Include patterns: {include_patterns}")
+                logger.debug(f"Exclude patterns: {exclude_patterns}")
+            
             # Get repository information
             repo_info = await self.get_repository_info(owner, repo)
+            if self.verbose:
+                logger.debug(f"Repository info: {repo_info.full_name}, size: {repo_info.size}KB")
+            
             git_ref = await self.resolve_reference(owner, repo, ref)
+            if self.verbose:
+                logger.debug(f"Resolved reference {ref} to {git_ref.ref_type}: {git_ref.sha}")
             
             # Create filter criteria
             filters = FilterCriteria(
@@ -148,7 +170,15 @@ class GitHubDownloader:
             )
             
             # Execute download
+            if self.verbose:
+                logger.debug("Starting download execution...")
+            
             result = await self.orchestrator.execute_download(request)
+            
+            if self.verbose:
+                logger.debug(f"Download completed: {len(result.downloaded_files)} files, "
+                           f"{len(result.failed_files)} failures, "
+                           f"{result.progress.downloaded_bytes} bytes")
             
             return result
             
@@ -270,3 +300,18 @@ class GitHubDownloader:
         """
 
         return await self.orchestrator.get_current_progress()
+    
+    def set_verbose(self, verbose: bool) -> None:
+        """
+        Enable or disable verbose logging at runtime.
+        
+        Args:
+            verbose: True to enable verbose logging, False to disable
+        """
+        self.verbose = verbose
+        if verbose:
+            logger.setLevel(logging.DEBUG)
+            logger.debug("Verbose logging enabled")
+        else:
+            logger.setLevel(logging.INFO)
+            logger.info("Verbose logging disabled")
