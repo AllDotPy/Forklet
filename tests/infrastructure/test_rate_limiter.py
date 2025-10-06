@@ -1,5 +1,3 @@
-# tests/infrastructure/test_rate_limiter.py
-
 import time
 import random
 import asyncio
@@ -101,7 +99,7 @@ async def test_update_rate_limit_increments_consecutive_limits():
 
 ## 4. Acquire Logic and Wait Behavior Tests
 # ------------------------------------------
-
+@pytest.mark.asyncio
 @patch('asyncio.sleep', new_callable=AsyncMock)
 @pytest.mark.asyncio
 async def test_acquire_waits_when_primary_rate_limit_exhausted(mock_sleep):
@@ -119,7 +117,7 @@ async def test_acquire_waits_when_primary_rate_limit_exhausted(mock_sleep):
         
         mock_sleep.assert_any_call(15.0)
 
-
+@pytest.mark.asyncio
 @patch('asyncio.sleep', new_callable=AsyncMock)
 @pytest.mark.asyncio
 async def test_acquire_uses_adaptive_delay(mock_sleep):

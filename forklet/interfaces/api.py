@@ -5,7 +5,6 @@ Python API for Forklet GitHub Repository Downloader.
 
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
-from dataclasses import dataclass
 
 from forklet.core import DownloadOrchestrator
 from forklet.services import GitHubAPIService, DownloadService
@@ -17,9 +16,6 @@ from forklet.models import (
 )
 
 
-
-####
-##      GITHUB DOWNLOADER PYTHON API
 #####
 class GitHubDownloader:
     """
@@ -147,7 +143,8 @@ class GitHubDownloader:
                 chunk_size = config.chunk_size if config else 8192,
                 timeout = config.timeout if config else 300,
                 overwrite_existing = config.overwrite_existing if config else False,
-                preserve_structure = config.preserve_structure if config else True
+                preserve_structure = config.preserve_structure if config else True,
+                show_progress_bars = config.show_progress if config else True
             )
             
             # Execute download

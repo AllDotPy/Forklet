@@ -142,8 +142,10 @@ def retry_on_error(max_retries: int = 3) -> Callable:
                         )
                         continue
                     raise
+
                 except Exception as e:
                     # Don't retry on other errors
+                    logger.error(f"Non-retryable error: {e}")
                     raise
             
             raise last_exception or Exception("All retry attempts failed")

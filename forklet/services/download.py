@@ -66,7 +66,7 @@ class DownloadService:
             progress_bar = None
             
             if show_progress and total_size > 1024:  # Only show for files > 1KB
-                progress_bar = async_tqdm(
+                    progress_bar = async_tqdm(
                     total = total_size,
                     unit = 'B',
                     unit_scale = True,

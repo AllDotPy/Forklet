@@ -6,7 +6,7 @@ Command-line interface for Forklet GitHub Repository Downloader.
 import click
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from forklet.core import DownloadOrchestrator
 from forklet.services import GitHubAPIService, DownloadService
@@ -47,7 +47,7 @@ class ForkletCLI:
             self.github_service, self.download_service
         )
     
-    def parse_repository_string(self, repo_str: str) -> tuple[str, str]:
+    def parse_repository_string(self, repo_str: str) -> Tuple[str, str]:
         """
         Parse repository string in format owner/repo.
         
@@ -203,7 +203,9 @@ class ForkletCLI:
             click.echo("✅ Download completed successfully!")
             click.echo(f"   📁 Files: {len(result.downloaded_files)} downloaded")
             click.echo(f"   💾 Size: {result.progress.downloaded_bytes} bytes")
-            # click.echo(f"   ⚡ Speed: {result.average_speed:.2f} bytes/sec")
+            
+            if result.average_speed is not None:
+                click.echo(f"   ⚡ Speed: {result.average_speed:.2f} bytes/sec")
             
             if result.skipped_files:
                 click.echo(f"   ⏭️  Skipped: {len(result.skipped_files)} files")

@@ -63,7 +63,14 @@ class GitHubAPIService:
         )
         
         # Sync client for PyGithub (used only for metadata)
-        self.github_client = Github(auth_token) if auth_token else Github()
+        self.github_client = Github(
+            auth_token, 
+            retry = self.retry_manager.max_retries, 
+            user_agent = USER_AGENT
+        ) if auth_token else Github(
+            retry = self.retry_manager.max_retries, 
+            user_agent = USER_AGENT
+        )
     
     async def __aenter__(self):
         """Async context manager entry."""
