@@ -127,7 +127,7 @@ async def test_acquire_uses_adaptive_delay(mock_sleep):
     rl = RateLimiter(default_delay=1.0)
     
     # Mock time.time() to simulate time passing
-    with patch('time.time', side_effect=[1000.0, 1000.1, 1000.2, 1000.3]) as mock_time:
+    with patch('time.time', side_effect=[1000.0, 1000.1, 1000.2, 1000.3]):
         # Ensure rate limit is not exhausted
         rl.rate_limit_info.remaining = 2000
         
