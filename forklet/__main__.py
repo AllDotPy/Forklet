@@ -117,15 +117,22 @@ def download(
 def info(ctx, repository: str, ref: str):
     """Show information about a repository."""
 
-    try:
+    async def get_repo_info():
+        """Fetch repository information asynchronously."""
+
         app = ForkletCLI()
         app.initialize_services(ctx.obj.get('token'))
         
         owner, repo_name = app.parse_repository_string(repository)
         
         # Get repository info
-        repo_info =   app.github_service.get_repository_info(owner, repo_name)
-        git_ref = app.github_service.resolve_reference(owner, repo_name, ref)
+        repo_info = await app.github_service.get_repository_info(owner, repo_name)
+        git_ref = await app.github_service.resolve_reference(owner, repo_name, ref)
+
+        return repo_info, git_ref
+
+    try:
+        repo_info, git_ref = asyncio.run(get_repo_info())
         
         # Display information
         click.echo(f"📊 Repository: {repo_info.full_name}")
@@ -140,6 +147,36 @@ def info(ctx, repository: str, ref: str):
         click.echo(f"🔖 Topics: {', '.join(repo_info.topics) or 'None'}")
         click.echo(f"🎯 Current ref: {git_ref}")
         
+    except Exception as e:
+        click.echo(f"❌ Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+def status():
+    """Show current download status and progress"""
+    
+    try:
+        app = ForkletCLI()
+        app.initialize_services()
+        
+        # Check if there's an active download
+        progress = app.orchestrator.get_current_progress() if hasattr(app, 'orchestrator') else None
+        
+        if progress is None:
+            click.echo("📊 No active downloads")
+        else:
+            click.echo("📊 Current Download Status:")
+            click.echo(f"   📁 Files: {progress.downloaded_files}/{progress.total_files}")
+            click.echo(f"   📊 Progress: {progress.progress_percentage:.1f}%")
+            click.echo(f"   💾 Downloaded: {progress.downloaded_bytes}/{progress.total_bytes} bytes")
+            if progress.current_file:
+                click.echo(f"   📄 Current file: {progress.current_file}")
+            if progress.download_speed > 0:
+                click.echo(f"   ⚡ Speed: {progress.download_speed:.2f} bytes/sec")
+            if progress.eta_seconds:
+                click.echo(f"   ⏱️  ETA: {progress.eta_seconds:.0f} seconds")
+                
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)

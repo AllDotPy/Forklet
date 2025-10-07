@@ -25,5 +25,3 @@ class StructuredLogRecord:
 __all__ = [
     "StructuredLogRecord",
 ]
-
-

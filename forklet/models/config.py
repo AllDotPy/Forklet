@@ -35,5 +35,3 @@ class DownloadConfig:
 __all__ = [
     "DownloadConfig",
 ]
-
-

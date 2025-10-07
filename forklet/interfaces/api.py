@@ -3,6 +3,7 @@
 Python API for Forklet GitHub Repository Downloader.
 """
 
+import logging
 from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 
@@ -14,8 +15,6 @@ from forklet.models import (
     DownloadRequest, DownloadResult, DownloadStrategy, FilterCriteria,
     RepositoryInfo, GitReference, ProgressInfo, DownloadConfig
 )
-
-
 #####
 class GitHubDownloader:
     """
@@ -23,16 +22,27 @@ class GitHubDownloader:
     
     Provides a clean, typed interface for downloading GitHub repository content.
     """
-    
-    def __init__(self, auth_token: Optional[str] = None):
+
+    def __init__(self, auth_token: Optional[str] = None, verbose: bool = False):
         """
         Initialize the downloader with optional authentication.
         
         Args:
             auth_token: GitHub personal access token for authentication
+            verbose: Enable detailed logging and progress information (default: False)
         """
-
+        
+        
+        self.verbose = verbose
         self.auth_token = auth_token
+        
+        # Configure logger based on verbose setting
+        if verbose:
+            logger.setLevel(logging.DEBUG)
+            logger.debug("Verbose logging enabled for GitHubDownloader")
+        else:
+            logger.setLevel(logging.INFO)
+        
         self.rate_limiter = RateLimiter()
         self.retry_manager = RetryManager()
         
@@ -121,9 +131,18 @@ class GitHubDownloader:
         """
 
         try:
+            logger.debug(f"Starting download for {owner}/{repo}@{ref}")
+            logger.debug(f"Destination: {destination}")
+            logger.debug(f"Strategy: {strategy}")
+            logger.debug(f"Include patterns: {include_patterns}")
+            logger.debug(f"Exclude patterns: {exclude_patterns}")
+            
             # Get repository information
             repo_info = await self.get_repository_info(owner, repo)
+            logger.debug(f"Repository info: {repo_info.full_name}, size: {repo_info.size}KB")
+            
             git_ref = await self.resolve_reference(owner, repo, ref)
+            logger.debug(f"Resolved reference {ref} to {git_ref.ref_type}: {git_ref.sha}")
             
             # Create filter criteria
             filters = FilterCriteria(
@@ -148,7 +167,13 @@ class GitHubDownloader:
             )
             
             # Execute download
+            logger.debug("Starting download execution...")
+            
             result = await self.orchestrator.execute_download(request)
+            
+            logger.debug(f"Download completed: {len(result.downloaded_files)} files, "
+                       f"{len(result.failed_files)} failures, "
+                       f"{result.progress.downloaded_bytes} bytes")
             
             return result
             
@@ -246,27 +271,82 @@ class GitHubDownloader:
 
         return await self.github_service.get_rate_limit_info()
     
-    async def cancel_current_download(self) -> None:
-        """Cancel the currently running download operation."""
-
-        await self.orchestrator.cancel()
+    def cancel_current_download(self) -> Optional[DownloadResult]:
+        """
+        Cancel the currently running download operation.
+        
+        Returns:
+            DownloadResult marked as cancelled, or None if no active download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # Start download in background...
+            >>> result = downloader.cancel_current_download()
+            >>> if result:
+            ...     print(f"Download cancelled: {result.status}")
+        """
+        return self.orchestrator.cancel()
     
-    async def pause_current_download(self) -> None:
-        """Pause the currently running download operation."""
-
-        await self.orchestrator.pause()
+    async def pause_current_download(self) -> Optional[DownloadResult]:
+        """
+        Pause the currently running download operation.
+        
+        Returns:
+            DownloadResult marked as paused, or None if no active download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # Start download in background...
+            >>> result = await downloader.pause_current_download()
+            >>> if result:
+            ...     print(f"Download paused: {result.status}")
+        """
+        return await self.orchestrator.pause()
     
-    async def resume_current_download(self) -> None:
-        """Resume a paused download operation."""
-
-        await self.orchestrator.resume()
+    async def resume_current_download(self) -> Optional[DownloadResult]:
+        """
+        Resume a paused download operation.
+        
+        Returns:
+            DownloadResult marked as resuming, or None if no paused download
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # After pausing a download...
+            >>> result = await downloader.resume_current_download()
+            >>> if result:
+            ...     print(f"Download resumed: {result.status}")
+        """
+        return await self.orchestrator.resume()
     
-    async def get_download_progress(self) -> Optional[ProgressInfo]:
+    def get_download_progress(self) -> Optional[ProgressInfo]:
         """
         Get progress information for the current download.
         
         Returns:
             ProgressInfo object, or None if no download in progress
+            
+        Example:
+            >>> downloader = GitHubDownloader()
+            >>> # During an active download...
+            >>> progress = downloader.get_download_progress()
+            >>> if progress:
+            ...     print(f"Progress: {progress.progress_percentage:.1f}%")
+            ...     print(f"Files: {progress.downloaded_files}/{progress.total_files}")
         """
-
-        return await self.orchestrator.get_current_progress()
+        return self.orchestrator.get_current_progress()
+    
+    def set_verbose(self, verbose: bool) -> None:
+        """
+        Enable or disable verbose logging at runtime.
+        
+        Args:
+            verbose: True to enable verbose logging, False to disable
+        """
+        self.verbose = verbose
+        if verbose:
+            logger.setLevel(logging.DEBUG)
+            logger.debug("Verbose logging enabled")
+        else:
+            logger.setLevel(logging.INFO)
+            logger.info("Verbose logging disabled")
