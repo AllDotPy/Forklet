@@ -47,6 +47,7 @@ def cli(ctx, verbose: bool, token: Optional[str]):
               help='Download strategy')
 @click.option('--concurrent', '-c', default=5, help='Concurrent downloads')
 @click.option('--overwrite', '-f', is_flag=True, help='Overwrite existing files')
+@click.option('--dry-run', '-n', is_flag=True, help='Preview files to download without writing')
 @click.pass_context
 def download(
     ctx, 
@@ -65,7 +66,8 @@ def download(
     strategy: str,
     concurrent: int, 
     overwrite: bool,
-    no_progress: bool
+    no_progress: bool,
+    dry_run: bool
 ):
     """
     Download files from a GitHub repository.
@@ -104,7 +106,8 @@ def download(
             token = token,
             concurrent = concurrent,
             overwrite = overwrite,
-            progress = not no_progress
+            progress = not no_progress,
+            dry_run = dry_run
         )
 
     asyncio.run(run_download())
@@ -192,3 +195,7 @@ def version():
 ####    MAIN ENTRYPOINT FOR THE FORKLET CLI
 def main():
     cli()
+
+
+if __name__ == "__main__":
+    main()

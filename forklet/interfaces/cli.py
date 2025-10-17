@@ -126,7 +126,8 @@ class ForkletCLI:
         token: Optional[str],
         concurrent: int,
         overwrite: bool,
-        progress: bool = True
+        progress: bool = True,
+        dry_run: bool = False
     ) -> None:
         """
         Execute the download operation.
@@ -168,6 +169,7 @@ class ForkletCLI:
                 max_concurrent_downloads = concurrent,
                 overwrite_existing = overwrite,
                 show_progress_bars = progress
+                ,dry_run = dry_run
             )
             
             # Execute download

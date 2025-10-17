@@ -144,12 +144,8 @@ class DownloadOrchestrator:
                 f"Filtered {filter_result.filtered_files}/{filter_result.total_files} "
                 "files for download"
             )
-            
-            # Prepare destination
-            if request.create_destination:
-                await self.download_service.ensure_directory(request.destination)
-            
-            # Create download result and set as current
+
+            # Create download result and set as current (so control operations can act)
             result = DownloadResult(
                 request=request,
                 status=DownloadStatus.IN_PROGRESS,
@@ -157,6 +153,31 @@ class DownloadOrchestrator:
                 started_at=datetime.now()
             )
             self._current_result = result
+
+            # If dry-run is explicitly requested, prepare a summary and return without writing files
+            if getattr(request, 'dry_run', None) is True:
+                # Determine which files would be skipped due to existing local files
+                skipped = []
+                for f in target_files:
+                    if request.preserve_structure:
+                        target_path = request.destination / f.path
+                    else:
+                        target_path = request.destination / Path(f.path).name
+                    if target_path.exists() and not request.overwrite_existing:
+                        skipped.append(f.path)
+
+                # Update and return the result summarizing what would happen
+                result.status = DownloadStatus.COMPLETED
+                result.downloaded_files = []
+                result.skipped_files = skipped
+                result.failed_files = {}
+                result.completed_at = datetime.now()
+                logger.info(f"Dry-run: {len(target_files)} files matched, {len(skipped)} would be skipped")
+                return result
+
+            # Prepare destination
+            if request.create_destination:
+                await self.download_service.ensure_directory(request.destination)
             
             # Reset state tracking
             self._completed_files.clear()

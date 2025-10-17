@@ -106,6 +106,9 @@ class DownloadRequest:
     # Authentication
     token: Optional[str] = None
 
+    # Dry-run preview mode (do not write files)
+    dry_run: bool = False
+
     # Metadata
     request_id: str = field(default_factory=lambda: f"req_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     created_at: datetime = field(default_factory=datetime.now)
