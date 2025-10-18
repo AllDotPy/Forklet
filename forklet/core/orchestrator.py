@@ -152,6 +152,8 @@ class DownloadOrchestrator:
                 progress=progress,
                 started_at=datetime.now()
             )
+            # Expose matched file paths for verbose reporting
+            result.matched_files = [f.path for f in target_files]
             self._current_result = result
 
             # If dry-run is explicitly requested, prepare a summary and return without writing files
@@ -172,6 +174,7 @@ class DownloadOrchestrator:
                 result.skipped_files = skipped
                 result.failed_files = {}
                 result.completed_at = datetime.now()
+                # matched_files already set above; keep it for verbose output
                 logger.info(f"Dry-run: {len(target_files)} files matched, {len(skipped)} would be skipped")
                 return result
 
@@ -194,6 +197,8 @@ class DownloadOrchestrator:
             result.failed_files = failed_files
             result.cache_hits = stats.cache_hits
             result.api_calls_made = stats.api_calls
+            # Ensure matched_files remains available for verbose output
+            result.matched_files = [f.path for f in target_files]
             
             # Mark as completed
             stats.end_time = datetime.now()

@@ -107,7 +107,8 @@ def download(
             concurrent = concurrent,
             overwrite = overwrite,
             progress = not no_progress,
-            dry_run = dry_run
+            dry_run = dry_run,
+            verbose = ctx.obj.get('verbose', False)
         )
 
     asyncio.run(run_download())
@@ -195,7 +196,4 @@ def version():
 ####    MAIN ENTRYPOINT FOR THE FORKLET CLI
 def main():
     cli()
-
-
-if __name__ == "__main__":
-    main()
+ 
