@@ -197,9 +197,7 @@ class DownloadOrchestrator:
             result.failed_files = failed_files
             result.cache_hits = stats.cache_hits
             result.api_calls_made = stats.api_calls
-            # Ensure matched_files remains available for verbose output
-            result.matched_files = [f.path for f in target_files]
-            
+    
             # Mark as completed
             stats.end_time = datetime.now()
             result.mark_completed()

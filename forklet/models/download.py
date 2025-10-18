@@ -192,6 +192,8 @@ class DownloadResult:
     downloaded_files: List[str] = field(default_factory=list)
     skipped_files: List[str] = field(default_factory=list)
     failed_files: Dict[str, str] = field(default_factory=dict)
+    # Matched file paths (populated by orchestrator for verbose reporting)
+    matched_files: List[str] = field(default_factory=list)
 
     # Metadata
     started_at: datetime = field(default_factory=datetime.now)
