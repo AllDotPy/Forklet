@@ -1,3 +1,18 @@
+<p align="center">
+    <a href="https://pypi.org/project/Forklet/">
+        <img src="https://img.shields.io/pypi/v/Forklet" alt="PyPI Version" />
+    </a>
+    <a href="https://pepy.tech/project/Forklet">
+        <img src="https://static.pepy.tech/badge/Forklet" alt="Downloads" />
+    </a>
+    <a href="LICENSE">
+        <img src="https://img.shields.io/badge/Apache-2.0-blue" alt="License" />
+    </a>
+    <a href="https://github.com/AllDotPy/Forklet">
+        <img src="https://img.shields.io/github/commit-activity/m/AllDotPy/Forklet" alt="GitHub commit activity" />
+    </a>
+</p>
+
 # Forklet
 
 Download any file or folder from any GitHub repo by branch, tag, or commit with glob pattern filtering.
