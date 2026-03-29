@@ -207,7 +207,7 @@ marimo/_lsp/
 __marimo__/
 
 # backups
-**.py.backup
+*.py.backup
 
 # Road Map Plan files
 *PLAN.md
