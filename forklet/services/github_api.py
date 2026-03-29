@@ -144,41 +144,42 @@ class GitHubAPIService:
             ValueError: If reference cannot be resolved
         """
 
-        try:
-            # Try to get as branch first
-            await self.rate_limiter.acquire()
-            branch = await asyncio.to_thread(
-                lambda: self.github_client.get_repo(f"{owner}/{repo}").get_branch(ref)
-            )
-            return GitReference(name=ref, ref_type="branch", sha=branch.commit.sha)
-        except GithubException:
-            pass  # Not a branch, try other types
+        # Define reference types to try in order
+        reference_types = [
+            (
+                "branch",
+                lambda: self.github_client.get_repo(f"{owner}/{repo}").get_branch(ref),
+            ),
+            ("tag", lambda: self._get_tag(ref, owner, repo)),
+            (
+                "commit",
+                lambda: self.github_client.get_repo(f"{owner}/{repo}").get_commit(ref),
+            ),
+        ]
 
-        try:
-            # Try to get as tag
-            await self.rate_limiter.acquire()
-            tags = await asyncio.to_thread(
-                lambda: list(self.github_client.get_repo(f"{owner}/{repo}").get_tags())
-            )
-            for tag in tags:
-                if tag.name == ref:
-                    return GitReference(name=ref, ref_type="tag", sha=tag.commit.sha)
-        except GithubException:
-            pass  # Not a tag
-
-        try:
-            # Try to get as commit
-            await self.rate_limiter.acquire()
-            commit = await asyncio.to_thread(
-                lambda: self.github_client.get_repo(f"{owner}/{repo}").get_commit(ref)
-            )
-            return GitReference(name=ref, ref_type="commit", sha=commit.sha)
-        except GithubException:
-            pass  # Not a valid commit
+        for ref_type, getter_func in reference_types:
+            try:
+                await self.rate_limiter.acquire()
+                github_obj = await asyncio.to_thread(getter_func)
+                return GitReference(
+                    name=ref, ref_type=ref_type, sha=github_obj.commit.sha
+                )
+            except GithubException:
+                continue  # Try next reference type
 
         raise ValueError(
             f"Could not resolve reference '{ref}' for repository {owner}/{repo}"
         )
+
+    async def _get_tag(self, tag_name: str, owner: str, repo: str):
+        """Helper to get a tag by name - needed because get_tags() returns a list."""
+        tags = await asyncio.to_thread(
+            lambda: list(self.github_client.get_repo(f"{owner}/{repo}").get_tags())
+        )
+        for tag in tags:
+            if tag.name == tag_name:
+                return tag
+        raise GithubException(status=404, data={"message": f"Tag {tag_name} not found"})
 
     @handle_api_error
     async def get_repository_tree(
@@ -246,10 +247,9 @@ class GitHubAPIService:
 
         Args:
             download_url: GitHub API URL for the file content
-            stream: If True, returns an async iterator for streaming large files
 
         Returns:
-            File content as bytes (already decoded from base64) or async iterator of bytes
+            File content as bytes (already decoded from base64)
 
         Raises:
             DownloadError: If download fails
@@ -268,18 +268,7 @@ class GitHubAPIService:
             if "content" in content_data:
                 import base64
 
-                decoded_content = base64.b64decode(content_data["content"])
-
-                if stream:
-                    # Return an async iterator that yields chunks of the content
-                    async def content_stream():
-                        chunk_size = 8192  # 8KB chunks
-                        for i in range(0, len(decoded_content), chunk_size):
-                            yield decoded_content[i : i + chunk_size]
-
-                    return content_stream()
-                else:
-                    return decoded_content
+                return base64.b64decode(content_data["content"])
             else:
                 raise DownloadError(
                     f"No content found in API response for {download_url}"
