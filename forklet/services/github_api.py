@@ -2,7 +2,7 @@
 Service for interacting with GitHub API with rate limiting and error handling.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, AsyncIterator
 
 import asyncio
 import httpx
@@ -239,7 +239,9 @@ class GitHubAPIService:
             raise
 
     @handle_api_error
-    async def get_file_content(self, download_url: str) -> bytes:
+    async def get_file_content(
+        self, download_url: str, stream: bool = False
+    ) -> bytes | AsyncIterator[bytes]:
         """
         Download file content from GitHub API.
 
