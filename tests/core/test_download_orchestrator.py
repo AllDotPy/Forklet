@@ -10,6 +10,7 @@ from forklet.models import GitHubFile, DownloadStatus
 
 # --- Test Fixtures for Setup ---
 
+
 @pytest.fixture
 def mock_services():
     """Creates mock objects for services used by the orchestrator."""
@@ -21,6 +22,7 @@ def mock_services():
     download_service.ensure_directory = AsyncMock()
     return github_service, download_service
 
+
 @pytest.fixture
 def orchestrator(mock_services):
     """Initializes the DownloadOrchestrator with mocked services."""
@@ -28,10 +30,11 @@ def orchestrator(mock_services):
     orchestrator_instance = DownloadOrchestrator(
         github_service=github_service,
         download_service=download_service,
-        max_concurrent_downloads=5
+        max_concurrent_downloads=5,
     )
     orchestrator_instance.reset_state()
     return orchestrator_instance
+
 
 @pytest.fixture
 def mock_request():
@@ -51,10 +54,11 @@ def mock_request():
     request.show_progress_bars = False
     return request
 
+
 # --- Test Cases ---
 
-class TestDownloadOrchestrator:
 
+class TestDownloadOrchestrator:
     def test_initialization_sets_properties_correctly(self, orchestrator):
         """Verify that max_concurrent_downloads is correctly set."""
         assert orchestrator.max_concurrent_downloads == 5
@@ -62,45 +66,57 @@ class TestDownloadOrchestrator:
         assert not orchestrator._is_cancelled
 
     @pytest.mark.asyncio
-    async def test_execute_download_success(self, orchestrator, mock_services, mock_request):
+    async def test_execute_download_success(
+        self, orchestrator, mock_services, mock_request
+    ):
         """Simulate a successful download with mocked services."""
         github_service, _ = mock_services
         mock_file_list = [MagicMock(spec=GitHubFile, path="file1.txt", size=100)]
         github_service.get_repository_tree.return_value = mock_file_list
 
-        with patch.object(orchestrator, '_download_files_concurrently', new_callable=AsyncMock) as mock_downloader, \
-             patch('forklet.core.orchestrator.FilterEngine') as mock_filter_engine:
-            
+        with (
+            patch.object(
+                orchestrator, "_download_files_concurrently", new_callable=AsyncMock
+            ) as mock_downloader,
+            patch("forklet.core.orchestrator.FilterEngine") as mock_filter_engine,
+        ):
             mock_downloader.return_value = (["file1.txt"], {})
-            mock_filter_engine.return_value.filter_files.return_value.included_files = mock_file_list
+            mock_filter_engine.return_value.filter_files.return_value.included_files = (
+                mock_file_list
+            )
 
             result = await orchestrator.execute_download(request=mock_request)
-            
+
             mock_downloader.assert_awaited_once()
             assert result.status == DownloadStatus.COMPLETED
 
     @pytest.mark.asyncio
-    async def test_execute_download_repo_fetch_fails(self, orchestrator, mock_services, mock_request):
+    async def test_execute_download_repo_fetch_fails(
+        self, orchestrator, mock_services, mock_request
+    ):
         """Test error handling when repository tree fetch fails."""
         github_service, _ = mock_services
         github_service.get_repository_tree.side_effect = Exception("API limit reached")
-        
+
         result = await orchestrator.execute_download(request=mock_request)
-        
+
         assert result.status == DownloadStatus.FAILED
         assert "API limit reached" in result.error_message
 
     def test_cancel_sets_flag_and_logs(self, orchestrator):
-        """Test cancel() -> sets _is_cancelled=True and logs when a download is active."""
-        orchestrator._current_result = MagicMock()
+        """Test cancel() -> sets is_cancelled=True and logs when a download is active."""
+        orchestrator.state_controller.set_current_result(MagicMock())
 
-        with patch('forklet.core.orchestrator.logger') as mock_logger:
-            orchestrator.cancel()
-            assert orchestrator._is_cancelled is True
+        with patch("forklet.core.orchestrator.logger") as mock_logger:
+            result = orchestrator.cancel()
+            assert result is not None
+            assert orchestrator.is_cancelled is True
             mock_logger.info.assert_called_with("Download cancelled by user")
 
     @pytest.mark.asyncio
-    async def test_pause_and_resume_flow(self, orchestrator, mock_services, mock_request):
+    async def test_pause_and_resume_flow(
+        self, orchestrator, mock_services, mock_request
+    ):
         """Tests the full pause and resume flow in a stable, controlled manner."""
         github_service, _ = mock_services
         # --- THIS IS THE FIX ---
@@ -108,27 +124,38 @@ class TestDownloadOrchestrator:
         mock_file_list = [MagicMock(spec=GitHubFile, path="file1.txt", size=100)]
         # -----------------------
         github_service.get_repository_tree.return_value = mock_file_list
-        
+
         download_can_complete = asyncio.Event()
 
         async def wait_for_signal_to_finish(*args, **kwargs):
             await download_can_complete.wait()
             return (["file1.txt"], {})
-        
-        with patch.object(orchestrator, '_download_files_concurrently', side_effect=wait_for_signal_to_finish), \
-             patch('forklet.core.orchestrator.FilterEngine') as mock_filter_engine:
-            
-            mock_filter_engine.return_value.filter_files.return_value.included_files = mock_file_list
 
-            download_task = asyncio.create_task(orchestrator.execute_download(mock_request))
-            
+        with (
+            patch.object(
+                orchestrator,
+                "_download_files_concurrently",
+                side_effect=wait_for_signal_to_finish,
+            ),
+            patch("forklet.core.orchestrator.FilterEngine") as mock_filter_engine,
+        ):
+            mock_filter_engine.return_value.filter_files.return_value.included_files = (
+                mock_file_list
+            )
+
+            download_task = asyncio.create_task(
+                orchestrator.execute_download(mock_request)
+            )
+
             await asyncio.sleep(0.01)
 
             if download_task.done() and download_task.exception():
                 raise download_task.exception()
-            
-            assert orchestrator._current_result is not None, "Orchestrator._current_result was not set."
-            
+
+            assert orchestrator._current_result is not None, (
+                "Orchestrator._current_result was not set."
+            )
+
             await orchestrator.pause()
             assert orchestrator._is_paused is True
             assert orchestrator._current_result.status == DownloadStatus.PAUSED

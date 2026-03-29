@@ -57,6 +57,11 @@ class DownloadOrchestrator:
         self._active_tasks = self.concurrency_manager._active_tasks
 
     @property
+    def max_concurrent_downloads(self) -> int:
+        """Get the maximum number of concurrent downloads."""
+        return self._max_concurrent_downloads
+
+    @property
     def is_cancelled(self) -> bool:
         """Check if the orchestrator is cancelled (backwards compatibility)."""
         return self._is_cancelled
@@ -65,11 +70,6 @@ class DownloadOrchestrator:
     def is_paused(self) -> bool:
         """Check if the orchestrator is paused (backwards compatibility)."""
         return self._is_paused
-
-    @property
-    def max_concurrent_downloads(self) -> int:
-        """Get the maximum number of concurrent downloads."""
-        return self._max_concurrent_downloads
 
     async def execute_download(self, request: DownloadRequest) -> DownloadResult:
         """
@@ -93,45 +93,44 @@ class DownloadOrchestrator:
         try:
             # Get repository tree
             files = await self.github_service.get_repository_tree(
-                request.repository.owner, request.repository.name, request.git_ref
+                request.repository.owner,
+                request.repository.name,
+                request.git_ref
             )
-            stats = type("obj", (object,), {"api_calls": 0})()  # Simple stats object
             stats.api_calls += 1
-
+            
             # Filter files
             filter_engine = FilterEngine(request.filters)
             filter_result = filter_engine.filter_files(files)
-
+            
             target_files = filter_result.included_files
-
+            
             # Reset progress tracker for this download (we are about to set new totals)
             self.progress_tracker.reset()
-
+            
             # Set up progress tracking
             self.progress_tracker.set_total_files(len(target_files))
-            self.progress_tracker.set_total_bytes(
-                sum(file.size for file in target_files)
-            )
+            self.progress_tracker.set_total_bytes(sum(file.size for file in target_files))
             self.progress_tracker.matched_files = [f.path for f in target_files]
-
+            
             logger.debug(
                 f"Filtered {filter_result.filtered_files}/{filter_result.total_files} "
                 "files for download"
             )
-
+ 
             # Create download result and set as current (so control operations can act)
             result = DownloadResult(
                 request=request,
                 status=DownloadStatus.IN_PROGRESS,
                 progress=self.progress_tracker.get_progress_snapshot(),
-                started_at=datetime.now(),
+                started_at=datetime.now()
             )
             self.state_controller.set_current_result(result)
             # Update backwards compatibility attribute
             self._current_result = result
-
+ 
             # If dry-run is explicitly requested, prepare a summary and return without writing files
-            if getattr(request, "dry_run", None) is True:
+            if getattr(request, 'dry_run', None) is True:
                 # Determine which files would be skipped due to existing local files
                 skipped = []
                 for f in target_files:
@@ -141,7 +140,7 @@ class DownloadOrchestrator:
                         target_path = request.destination / Path(f.path).name
                     if target_path.exists() and not request.overwrite_existing:
                         skipped.append(f.path)
-
+ 
                 # Update and return the result summarizing what would happen
                 result.status = DownloadStatus.COMPLETED
                 result.downloaded_files = []
@@ -149,19 +148,61 @@ class DownloadOrchestrator:
                 result.failed_files = {}
                 result.completed_at = datetime.now()
                 # matched_files already set above; keep it for verbose output
-                logger.info(
-                    f"Dry-run: {len(target_files)} files matched, {len(skipped)} would be skipped"
-                )
-
+                logger.info(f"Dry-run: {len(target_files)} files matched, {len(skipped)} would be skipped")
+                
                 # Clean up state
                 self.state_controller.clear_current_result()
                 self._current_result = None
-                self.progress_tracker.reset()
-                self.state_controller.reset()
-                self.concurrency_manager = ConcurrencyManager(
-                    self._max_concurrent_downloads
-                )
                 return result
+ 
+            # Prepare destination
+            if request.create_destination:
+                await self.download_service.ensure_directory(request.destination)
+             
+            # Download files concurrently with our concurrency manager
+            downloaded_files, failed_files = await self._download_files_concurrently(
+                target_files, request
+            )
+             
+            # Get skipped count from progress tracker
+            _, _, skipped_count = self.progress_tracker.get_results()
+             
+            # Update result
+            result.downloaded_files = downloaded_files
+            result.failed_files = failed_files
+            result.skipped_files = [None] * skipped_count  # Placeholder for compatibility
+            result.cache_hits = 0  # TODO: Implement cache hits tracking
+            result.api_calls_made = 0  # TODO: Implement API calls tracking
+             
+            # Mark as completed
+            result.mark_completed()
+             
+            logger.debug(
+                f"Download completed: {len(downloaded_files)} successful, "
+                f"{len(failed_files)} failed"
+            )
+             
+            return result
+             
+        except Exception as e:
+            logger.error(f"Download failed: {e}")
+            result = DownloadResult(
+                request = request,
+                status = DownloadStatus.FAILED,
+                progress = self.progress_tracker.get_progress_snapshot(),
+                error_message = str(e),
+                started_at = datetime.now(),
+                completed_at = datetime.now()
+            )
+             
+            return result
+        finally:
+            # Clean up state regardless of success or failure
+            self.state_controller.clear_current_result()
+            self._current_result = None
+            self.progress_tracker.reset()
+            self.state_controller.reset()
+            self.concurrency_manager = ConcurrencyManager(self._max_concurrent_downloads)
 
             # Prepare destination
             if request.create_destination:
@@ -169,7 +210,7 @@ class DownloadOrchestrator:
 
             # Reset state tracking in our components
             self.progress_tracker.reset()
-            self.state_controller.reset_tracking()
+            self.state_controller.reset()
 
             # Update backwards compatibility attributes after reset
             self._is_cancelled = self.state_controller.is_cancelled
@@ -190,7 +231,7 @@ class DownloadOrchestrator:
                 None
             ] * skipped_count  # Placeholder for compatibility
             result.cache_hits = 0  # TODO: Implement cache hits tracking
-            result.api_calls_made = stats.api_calls  # Use actual API calls count
+            result.api_calls_made = 0  # TODO: Implement API calls tracking
 
             # Mark as completed
             result.mark_completed()
@@ -218,11 +259,6 @@ class DownloadOrchestrator:
             # Clean up state regardless of success or failure
             self.state_controller.clear_current_result()
             self._current_result = None
-            self.progress_tracker.reset()
-            self.state_controller.reset()
-            self.concurrency_manager = ConcurrencyManager(
-                self._max_concurrent_downloads
-            )
 
     async def _download_files_concurrently(
         self, files: List[GitHubFile], request: DownloadRequest
