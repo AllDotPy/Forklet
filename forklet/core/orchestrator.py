@@ -323,8 +323,12 @@ class DownloadOrchestrator:
                 self.progress_tracker.add_skipped_file()
                 return None
 
-            # Download file content
-            content = await self.github_service.get_file_content(file.download_url)
+            # Determine if we should stream based on file size
+            should_stream = file.size > request.stream_threshold
+            # Download file content (potentially as a stream for large files)
+            content = await self.github_service.get_file_content(
+                file.download_url, stream=should_stream
+            )
 
             # Check again for pause after API call
             await self.state_controller.wait_for_resume()
@@ -334,7 +338,10 @@ class DownloadOrchestrator:
 
             # Save content to file
             bytes_written = await self.download_service.save_content(
-                content, target_path, show_progress=request.show_progress_bars
+                content,
+                target_path,
+                show_progress=request.show_progress_bars,
+                is_stream=should_stream,
             )
 
             # Update progress

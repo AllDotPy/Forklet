@@ -19,10 +19,10 @@ from .github import RepositoryInfo, GitReference
 class DownloadStrategy(Enum):
     """Available download strategies for repository content."""
 
-    ARCHIVE = "archive"             # Download as ZIP/TAR archive
-    INDIVIDUAL = "individual"       # Download files individually via API
-    GIT_CLONE = "git_clone"         # Use git clone (for complete history)
-    SPARSE_CHECKOUT = "sparse"      # Git sparse-checkout for partial downloads
+    ARCHIVE = "archive"  # Download as ZIP/TAR archive
+    INDIVIDUAL = "individual"  # Download files individually via API
+    GIT_CLONE = "git_clone"  # Use git clone (for complete history)
+    SPARSE_CHECKOUT = "sparse"  # Git sparse-checkout for partial downloads
 
 
 class DownloadStatus(Enum):
@@ -61,14 +61,18 @@ class FilterCriteria:
                 return False
 
         if self.include_patterns:
-            if not any(fnmatch.fnmatch(path, pattern) for pattern in self.include_patterns):
+            if not any(
+                fnmatch.fnmatch(path, pattern) for pattern in self.include_patterns
+            ):
                 return False
 
         if self.exclude_patterns:
             if any(fnmatch.fnmatch(path, pattern) for pattern in self.exclude_patterns):
                 return False
 
-        if (not self.include_hidden and any(part.startswith('.') for part in _Path(path).parts)):
+        if not self.include_hidden and any(
+            part.startswith(".") for part in _Path(path).parts
+        ):
             return False
 
         file_ext = _Path(path).suffix.lower()
@@ -102,6 +106,7 @@ class DownloadRequest:
     max_concurrent_downloads: int = 5
     chunk_size: int = 8192
     timeout: int = 300
+    stream_threshold: int = 10 * 1024 * 1024  # 10 MB default
 
     # Authentication
     token: Optional[str] = None
@@ -110,7 +115,9 @@ class DownloadRequest:
     dry_run: bool = False
 
     # Metadata
-    request_id: str = field(default_factory=lambda: f"req_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    request_id: str = field(
+        default_factory=lambda: f"req_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
     created_at: datetime = field(default_factory=datetime.now)
 
     def __post_init__(self) -> None:
@@ -122,6 +129,8 @@ class DownloadRequest:
             raise ValueError("chunk_size must be positive")
         if self.timeout <= 0:
             raise ValueError("timeout must be positive")
+        if self.stream_threshold < 0:
+            raise ValueError("stream_threshold must be non-negative")
 
 
 @dataclass
@@ -170,7 +179,9 @@ class ProgressInfo:
     def elapsed_time(self) -> float:
         return (datetime.now() - self.started_at).total_seconds()
 
-    def update_file_progress(self, bytes_downloaded: int, current_file: Optional[str] = None) -> None:
+    def update_file_progress(
+        self, bytes_downloaded: int, current_file: Optional[str] = None
+    ) -> None:
         self.downloaded_bytes += bytes_downloaded
         if current_file:
             self.current_file = current_file
@@ -219,11 +230,17 @@ class DownloadResult:
 
     def mark_completed(self) -> None:
         self.completed_at = datetime.now()
-        self.status = DownloadStatus.COMPLETED if not self.failed_files else DownloadStatus.FAILED
+        self.status = (
+            DownloadStatus.COMPLETED if not self.failed_files else DownloadStatus.FAILED
+        )
         if self.completed_at:
-            self.total_download_time = (self.completed_at - self.started_at).total_seconds()
+            self.total_download_time = (
+                self.completed_at - self.started_at
+            ).total_seconds()
             if self.total_download_time > 0 and self.progress.downloaded_bytes > 0:
-                self.average_speed = self.progress.downloaded_bytes / self.total_download_time
+                self.average_speed = (
+                    self.progress.downloaded_bytes / self.total_download_time
+                )
 
 
 @dataclass
