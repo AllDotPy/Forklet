@@ -8,115 +8,150 @@ import click
 from forklet.infrastructure.logger import logger
 from forklet.interfaces.cli import ForkletCLI
 from forklet.models import DownloadStrategy
-from forklet.models.constants import VERSION 
+from forklet.models.constants import VERSION
 
 
 # Create Click command group
 @click.group()
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option('--token', '-t', help='GitHub authentication token')
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
+@click.option("--token", "-t", help="GitHub authentication token")
 @click.pass_context
 def cli(ctx, verbose: bool, token: Optional[str]):
     """Forklet - Download files and folders from GitHub repositories."""
-    
+
     ctx.ensure_object(dict)
-    ctx.obj['verbose'] = verbose
-    ctx.obj['token'] = token
-    
+    ctx.obj["verbose"] = verbose
+    ctx.obj["token"] = token
+
     if verbose:
         logger.setLevel(logging.DEBUG)
         click.echo("🔍 Verbose mode enabled")
 
 
 @cli.command()
-@click.argument('repository')
-@click.argument('destination', type=click.Path(file_okay=False, writable=True))
-@click.option('--ref', '-r', default='main', help='Branch, tag, or commit SHA')
-@click.option('--include', '-i', multiple=True, help='Include patterns (glob)')
-@click.option('--exclude', '-e', multiple=True, help='Exclude patterns (glob)')
-@click.option('--max-size', type=int, help='Maximum file size in bytes')
-@click.option('--min-size', type=int, help='Minimum file size in bytes')
-@click.option('--extensions', multiple=True, help='Allowed file extensions')
-@click.option('--exclude-extensions', multiple=True, help='Excluded file extensions')
-@click.option('--include-hidden', is_flag=True, help='Include hidden files')
-@click.option('--no-binary', is_flag=True, help='Exclude binary files')
-@click.option('--no-progress', is_flag=False, help='Download with no progress')
-@click.option('--target-paths', multiple=True, help='Specific paths to download')
-@click.option('--strategy', '-s', default='individual',
-              type=click.Choice(['archive', 'individual', 'git_clone', 'sparse']),
-              help='Download strategy')
-@click.option('--concurrent', '-c', default=5, help='Concurrent downloads')
-@click.option('--overwrite', '-f', is_flag=True, help='Overwrite existing files')
-@click.option('--dry-run', '-n', is_flag=True, help='Preview files to download without writing')
+@click.argument("repository")
+@click.argument("destination", type=click.Path(file_okay=False, writable=True))
+@click.option("--ref", "-r", default="main", help="Branch, tag, or commit SHA")
+@click.option("--include", "-i", multiple=True, help="Include patterns (glob)")
+@click.option("--exclude", "-e", multiple=True, help="Exclude patterns (glob)")
+@click.option("--max-size", type=int, help="Maximum file size in bytes")
+@click.option("--min-size", type=int, help="Minimum file size in bytes")
+@click.option("--extensions", multiple=True, help="Allowed file extensions")
+@click.option("--exclude-extensions", multiple=True, help="Excluded file extensions")
+@click.option("--include-hidden", is_flag=True, help="Include hidden files")
+@click.option("--no-binary", is_flag=True, help="Exclude binary files")
+@click.option("--no-progress", is_flag=False, help="Download with no progress")
+@click.option("--target-paths", multiple=True, help="Specific paths to download")
+@click.option(
+    "--strategy",
+    "-s",
+    default="individual",
+    type=click.Choice(["archive", "individual", "git_clone", "sparse"]),
+    help="Download strategy",
+)
+@click.option("--concurrent", "-c", default=5, help="Concurrent downloads")
+@click.option("--overwrite", "-f", is_flag=True, help="Overwrite existing files")
+@click.option(
+    "--dry-run", "-n", is_flag=True, help="Preview files to download without writing"
+)
 @click.pass_context
 def download(
-    ctx, 
-    repository: str, 
-    destination: str, 
-    ref: str, 
+    ctx,
+    repository: str,
+    destination: str,
+    ref: str,
     include: List[str],
-    exclude: List[str], 
-    max_size: Optional[int], 
+    exclude: List[str],
+    max_size: Optional[int],
     min_size: Optional[int],
-    extensions: List[str], 
-    exclude_extensions: List[str], 
+    extensions: List[str],
+    exclude_extensions: List[str],
     include_hidden: bool,
-    no_binary: bool, 
-    target_paths: List[str], 
+    no_binary: bool,
+    target_paths: List[str],
     strategy: str,
-    concurrent: int, 
+    concurrent: int,
     overwrite: bool,
     no_progress: bool,
-    dry_run: bool
+    dry_run: bool,
 ):
     """
     Download files from a GitHub repository.
-    
+
     REPOSITORY: Format owner/repo (e.g., octocat/hello-world)
     DESTINATION: Local directory to save files
     """
 
     app = ForkletCLI()
-    
+
+    # Validate parameters
+    if min_size is not None and max_size is not None and min_size > max_size:
+        raise click.BadParameter(
+            "min-size cannot be greater than max-size", param_hint="--min-size"
+        )
+
+    if concurrent <= 0:
+        raise click.BadParameter(
+            "concurrent must be a positive integer", param_hint="--concurrent"
+        )
+
+    # Convert to lists for easier handling
+    include_list = list(include)
+    exclude_list = list(exclude)
+    extensions_list = list(extensions)
+    exclude_extensions_list = list(exclude_extensions)
+    target_paths_list = list(target_paths)
+
+    # Warn about extension overlap
+    if extensions_list and exclude_extensions_list:
+        ext_set = set(extensions_list)
+        excl_ext_set = set(exclude_extensions_list)
+        overlap = ext_set & excl_ext_set
+        if overlap:
+            click.echo(
+                f"⚠️  Warning: The following extensions are both included and excluded: {', '.join(overlap)}. They will be excluded.",
+                err=True,
+            )
+
     # Create filter criteria
     filters = app.create_filter_criteria(
-        include = list(include),
-        exclude = list(exclude),
-        max_size = max_size,
-        min_size = min_size,
-        extensions = list(extensions),
-        exclude_extensions = list(exclude_extensions),
-        include_hidden = include_hidden,
-        include_binary = not no_binary,
-        target_paths = list(target_paths)
+        include=include_list,
+        exclude=exclude_list,
+        max_size=max_size,
+        min_size=min_size,
+        extensions=extensions_list,
+        exclude_extensions=exclude_extensions_list,
+        include_hidden=include_hidden,
+        include_binary=not no_binary,
+        target_paths=target_paths_list,
     )
-    
+
     # Get authentication token from context or environment
-    token = ctx.obj.get('token')
+    token = ctx.obj.get("token")
 
     async def run_download():
-    
+
         # Execute download
         await app.execute_download(
-            repository = repository,
-            destination = destination,
-            ref = ref,
-            filters = filters,
-            strategy = DownloadStrategy(strategy),
-            token = token,
-            concurrent = concurrent,
-            overwrite = overwrite,
-            progress = not no_progress,
-            dry_run = dry_run,
-            verbose = ctx.obj.get('verbose', False)
+            repository=repository,
+            destination=destination,
+            ref=ref,
+            filters=filters,
+            strategy=DownloadStrategy(strategy),
+            token=token,
+            concurrent=concurrent,
+            overwrite=overwrite,
+            progress=not no_progress,
+            dry_run=dry_run,
+            verbose=ctx.obj.get("verbose", False),
         )
 
     asyncio.run(run_download())
 
 
 @cli.command()
-@click.argument('repository')
-@click.option('--ref', '-r', default='main', help='Branch, tag, or commit SHA')
+@click.argument("repository")
+@click.option("--ref", "-r", default="main", help="Branch, tag, or commit SHA")
 @click.pass_context
 def info(ctx, repository: str, ref: str):
     """Show information about a repository."""
@@ -125,10 +160,10 @@ def info(ctx, repository: str, ref: str):
         """Fetch repository information asynchronously."""
 
         app = ForkletCLI()
-        app.initialize_services(ctx.obj.get('token'))
-        
+        app.initialize_services(ctx.obj.get("token"))
+
         owner, repo_name = app.parse_repository_string(repository)
-        
+
         # Get repository info
         repo_info = await app.github_service.get_repository_info(owner, repo_name)
         git_ref = await app.github_service.resolve_reference(owner, repo_name, ref)
@@ -137,7 +172,7 @@ def info(ctx, repository: str, ref: str):
 
     try:
         repo_info, git_ref = asyncio.run(get_repo_info())
-        
+
         # Display information
         click.echo(f"📊 Repository: {repo_info.full_name}")
         click.echo(f"📝 Description: {repo_info.description or 'No description'}")
@@ -150,7 +185,7 @@ def info(ctx, repository: str, ref: str):
         click.echo(f"💻 Language: {repo_info.language or 'Unknown'}")
         click.echo(f"🔖 Topics: {', '.join(repo_info.topics) or 'None'}")
         click.echo(f"🎯 Current ref: {git_ref}")
-        
+
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)
@@ -159,28 +194,36 @@ def info(ctx, repository: str, ref: str):
 @cli.command()
 def status():
     """Show current download status and progress"""
-    
+
     try:
         app = ForkletCLI()
         app.initialize_services()
-        
+
         # Check if there's an active download
-        progress = app.orchestrator.get_current_progress() if hasattr(app, 'orchestrator') else None
-        
+        progress = (
+            app.orchestrator.get_current_progress()
+            if hasattr(app, "orchestrator")
+            else None
+        )
+
         if progress is None:
             click.echo("📊 No active downloads")
         else:
             click.echo("📊 Current Download Status:")
-            click.echo(f"   📁 Files: {progress.downloaded_files}/{progress.total_files}")
+            click.echo(
+                f"   📁 Files: {progress.downloaded_files}/{progress.total_files}"
+            )
             click.echo(f"   📊 Progress: {progress.progress_percentage:.1f}%")
-            click.echo(f"   💾 Downloaded: {progress.downloaded_bytes}/{progress.total_bytes} bytes")
+            click.echo(
+                f"   💾 Downloaded: {progress.downloaded_bytes}/{progress.total_bytes} bytes"
+            )
             if progress.current_file:
                 click.echo(f"   📄 Current file: {progress.current_file}")
             if progress.download_speed > 0:
                 click.echo(f"   ⚡ Speed: {progress.download_speed:.2f} bytes/sec")
             if progress.eta_seconds:
                 click.echo(f"   ⏱️  ETA: {progress.eta_seconds:.0f} seconds")
-                
+
     except Exception as e:
         click.echo(f"❌ Error: {e}", err=True)
         sys.exit(1)
@@ -196,5 +239,3 @@ def version():
 ####    MAIN ENTRYPOINT FOR THE FORKLET CLI
 def main():
     cli()
-    
- 
