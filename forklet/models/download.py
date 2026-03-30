@@ -268,7 +268,7 @@ class CacheEntry:
     key: str
     repository: RepositoryInfo
     git_ref: GitReference
-    content_hash: str
+    data: Any
     created_at: datetime
     expires_at: Optional[datetime] = None
     access_count: int = 0

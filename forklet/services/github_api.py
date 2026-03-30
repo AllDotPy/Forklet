@@ -17,6 +17,7 @@ from ..infrastructure.error_handler import (
     RepositoryNotFoundError,
     DownloadError,
 )
+from ..infrastructure.cache_manager import CacheManager
 from ..models import RepositoryInfo, GitReference, RepositoryType, GitHubFile
 from ..models.constants import USER_AGENT
 
