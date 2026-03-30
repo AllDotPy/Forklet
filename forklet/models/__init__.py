@@ -14,6 +14,7 @@ from .github import (
 from .download import (
     DownloadStrategy,
     DownloadStatus,
+    VerificationMethod,
     FilterCriteria,
     DownloadRequest,
     FileDownloadInfo,
@@ -32,6 +33,7 @@ __all__ = [
     # Download models
     "DownloadStrategy",
     "DownloadStatus",
+    "VerificationMethod",
     "FilterCriteria",
     "DownloadRequest",
     "FileDownloadInfo",

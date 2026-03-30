@@ -36,6 +36,14 @@ class DownloadStatus(Enum):
     PAUSED = "paused"
 
 
+class VerificationMethod(Enum):
+    """Methods for verifying file integrity."""
+
+    NONE = "none"
+    GIT_BLOB_SHA1 = "git_blob_sha1"
+    SIZE = "size"
+
+
 @dataclass
 class FilterCriteria:
     """Flexible filtering criteria for repository content."""
@@ -108,6 +116,10 @@ class DownloadRequest:
     timeout: int = 300
     stream_threshold: int = 10 * 1024 * 1024  # 10 MB default
 
+    # Integrity options
+    verify_integrity: bool = False
+    verification_method: VerificationMethod = VerificationMethod.GIT_BLOB_SHA1
+
     # Authentication
     token: Optional[str] = None
 
@@ -129,6 +141,8 @@ class DownloadRequest:
             raise ValueError("chunk_size must be positive")
         if self.timeout <= 0:
             raise ValueError("timeout must be positive")
+        if self.stream_threshold < 0:
+            raise ValueError("stream_threshold must be non-negative")
         if self.stream_threshold < 0:
             raise ValueError("stream_threshold must be non-negative")
 
@@ -205,6 +219,10 @@ class DownloadResult:
     failed_files: Dict[str, str] = field(default_factory=dict)
     # Matched file paths (populated by orchestrator for verbose reporting)
     matched_files: List[str] = field(default_factory=list)
+
+    # Integrity verification results
+    verified_files: List[str] = field(default_factory=list)
+    verification_failures: Dict[str, str] = field(default_factory=dict)
 
     # Metadata
     started_at: datetime = field(default_factory=datetime.now)
