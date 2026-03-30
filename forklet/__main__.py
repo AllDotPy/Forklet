@@ -152,12 +152,15 @@ def info(ctx, repository: str, ref: str):
         click.echo(f"🎯 Current ref: {git_ref}")
         
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        click.echo(f"💥 Error: {e}", err=True)
+        if ctx.obj.get("verbose", False):
+            logger.debug("Error in info command", exc_info=True)
         sys.exit(1)
 
 
 @cli.command()
-def status():
+@click.pass_context
+def status(ctx):
     """Show current download status and progress"""
     
     try:
@@ -182,7 +185,9 @@ def status():
                 click.echo(f"   ⏱️  ETA: {progress.eta_seconds:.0f} seconds")
                 
     except Exception as e:
-        click.echo(f"❌ Error: {e}", err=True)
+        click.echo(f"💥 Error: {e}", err=True)
+        if ctx.obj.get("verbose", False):
+            logger.debug("Error in status command", exc_info=True)
         sys.exit(1)
 
 
@@ -196,5 +201,3 @@ def version():
 ####    MAIN ENTRYPOINT FOR THE FORKLET CLI
 def main():
     cli()
-    
- 
