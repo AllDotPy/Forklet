@@ -3,7 +3,7 @@ Service for interacting with GitHub API with rate limiting and error handling.
 """
 
 from typing import List, Optional, Dict, Any, AsyncIterator, Callable
-import datetime
+from datetime import datetime
 import asyncio
 import httpx
 from github import Github, GithubException
@@ -19,8 +19,9 @@ from ..infrastructure import (
     RateLimiter,
     RetryManager,
     CacheManager,
-    RateLimitInfo
+    RateLimitInfo,
 )
+
 # from ..infrastructure.cache_manager import CacheManager
 from ..models import RepositoryInfo, GitReference, RepositoryType, GitHubFile
 from ..models.constants import USER_AGENT
@@ -56,6 +57,36 @@ class GitHubAPIService:
         # Set up rate limit callback to adjust concurrency
         self.rate_limiter.set_rate_limit_callback(self._on_rate_limit_update)
 
+        # Initialize attributes
+        self._lock = asyncio.Lock()
+        self._rate_limit_info = RateLimitInfo()
+        self._rate_limit_callback: Optional[Callable[[RateLimitInfo], None]] = None
+        self._external_rate_limit_callback: Optional[
+            Callable[[RateLimitInfo], None]
+        ] = None
+        self._consecutive_limits = 0
+
+        # Configure HTTP client
+        headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": USER_AGENT}
+
+        if self.auth_token:
+            headers["Authorization"] = f"token {self.auth_token}"
+
+        self.http_client = httpx.AsyncClient(
+            headers=headers, timeout=httpx.Timeout(self.timeout)
+        )
+
+        # Sync client for PyGithub (used only for metadata)
+        self.github_client = (
+            Github(
+                self.auth_token,
+                retry=self.retry_manager.max_retries,
+                user_agent=USER_AGENT,
+            )
+            if self.auth_token
+            else Github(retry=self.retry_manager.max_retries, user_agent=USER_AGENT)
+        )
+
     def set_external_rate_limit_callback(
         self, callback: Callable[[RateLimitInfo], None]
     ) -> None:
@@ -89,7 +120,9 @@ class GitHubAPIService:
         # Sync client for PyGithub (used only for metadata)
         self.github_client = (
             Github(
-                self.auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
+                self.auth_token,
+                retry=self.retry_manager.max_retries,
+                user_agent=USER_AGENT,
             )
             if self.auth_token
             else Github(retry=self.retry_manager.max_retries, user_agent=USER_AGENT)
@@ -103,6 +136,32 @@ class GitHubAPIService:
                 self._rate_limit_info.limit = int(
                     headers.get("x-ratelimit-limit", 5000)
                 )
+                self._rate_limit_info.remaining = int(
+                    headers.get("x-ratelimit-remaining", 5000)
+                )
+                self._rate_limit_info.used = int(headers.get("x-ratelimit-used", 0))
+
+                reset_timestamp = headers.get("x-ratelimit-reset")
+                if reset_timestamp:
+                    self._rate_limit_info.reset_time = datetime.fromtimestamp(
+                        int(reset_timestamp)
+                    )
+
+                # Track consecutive rate limit hits
+                if self._rate_limit_info.is_exhausted:
+                    self._consecutive_limits += 1
+                else:
+                    self._consecutive_limits = 0
+
+                # Invoke internal callback if set
+                if self._rate_limit_callback:
+                    self._rate_limit_callback(self._rate_limit_info)
+                # Invoke external callback if set
+                if self._external_rate_limit_callback:
+                    self._external_rate_limit_callback(self._rate_limit_info)
+
+            except (ValueError, KeyError) as e:
+                logger.warning(f"Failed to parse rate limit headers: {e}")
                 self._rate_limit_info.remaining = int(
                     headers.get("x-ratelimit-remaining", 5000)
                 )
@@ -143,7 +202,9 @@ class GitHubAPIService:
         # Sync client for PyGithub (used only for metadata)
         self.github_client = (
             Github(
-                self.auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
+                self.auth_token,
+                retry=self.retry_manager.max_retries,
+                user_agent=USER_AGENT,
             )
             if self.auth_token
             else Github(retry=self.retry_manager.max_retries, user_agent=USER_AGENT)
@@ -181,33 +242,43 @@ class GitHubAPIService:
         """
 
         try:
-            # Use sync client for this operation as it's metadata-focused
             await self.rate_limiter.acquire()
-            github_repo = await asyncio.to_thread(
-                lambda: self.github_client.get_repo(f"{owner}/{repo}")
+            url = f"{self.BASE_URL}/repos/{owner}/{repo}"
+            response = await self.retry_manager.execute(
+                lambda: self.http_client.get(url)
             )
+
+            # Update rate limit info
+            await self.rate_limiter.update_rate_limit_info(response.headers)
+
+            response.raise_for_status()
+            repo_data = response.json()
 
             return RepositoryInfo(
                 owner=owner,
                 name=repo,
-                full_name=github_repo.full_name,
-                url=github_repo.html_url,
-                default_branch=github_repo.default_branch,
+                full_name=repo_data["full_name"],
+                url=repo_data["html_url"],
+                default_branch=repo_data["default_branch"],
                 repo_type=RepositoryType.PRIVATE
-                if github_repo.private
+                if repo_data["private"]
                 else RepositoryType.PUBLIC,
-                size=github_repo.size,
-                is_private=github_repo.private,
-                is_fork=github_repo.fork,
-                created_at=github_repo.created_at,
-                updated_at=github_repo.updated_at,
-                language=github_repo.language,
-                description=github_repo.description,
-                topics=github_repo.get_topics(),
+                size=repo_data["size"],
+                is_private=repo_data["private"],
+                is_fork=repo_data["fork"],
+                created_at=datetime.fromisoformat(
+                    repo_data["created_at"].replace("Z", "+00:00")
+                ),
+                updated_at=datetime.fromisoformat(
+                    repo_data["updated_at"].replace("Z", "+00:00")
+                ),
+                language=repo_data["language"],
+                description=repo_data["description"],
+                topics=repo_data.get("topics", []),
             )
 
-        except GithubException as e:
-            if e.status == 404:
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
                 raise RepositoryNotFoundError(f"Repository {owner}/{repo} not found")
             raise
 
@@ -255,11 +326,9 @@ class GitHubAPIService:
             f"Could not resolve reference '{ref}' for repository {owner}/{repo}"
         )
 
-    async def _get_tag(self, tag_name: str, owner: str, repo: str):
+    def _get_tag(self, tag_name: str, owner: str, repo: str):
         """Helper to get a tag by name - needed because get_tags() returns a list."""
-        tags = await asyncio.to_thread(
-            lambda: list(self.github_client.get_repo(f"{owner}/{repo}").get_tags())
-        )
+        tags = list(self.github_client.get_repo(f"{owner}/{repo}").get_tags())
         for tag in tags:
             if tag.name == tag_name:
                 return tag
