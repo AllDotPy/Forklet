@@ -51,7 +51,10 @@ class RateLimiter:
     """
 
     def __init__(
-        self, default_delay: float = 1.0, max_delay: float = 60.0, adaptive: bool = True
+        self,
+        default_delay: float = 2.0,
+        max_delay: float = 120.0,
+        adaptive: bool = True,
     ):
         self.default_delay = default_delay
         self.max_delay = max_delay
@@ -67,8 +70,6 @@ class RateLimiter:
     ) -> None:
         """Set a callback to be invoked when rate limit information is updated."""
         self._rate_limit_callback = callback
-        self._rate_limit_callback: Optional[Callable[[RateLimitInfo], None]] = None
-        self._rate_limit_callback: Optional[Callable[[RateLimitInfo], None]] = None
 
     async def acquire(self) -> None:
         """Acquire rate limit permission."""
