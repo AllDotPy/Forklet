@@ -28,10 +28,41 @@ class ProgressTracker:
     # File tracking sets
     _completed_files: Set[str] = field(default_factory=set)
     _failed_files: Dict[str, str] = field(default_factory=dict)
+    _verified_files: Set[str] = field(default_factory=set)
+    _verification_failures: Dict[str, str] = field(default_factory=dict)
     _skipped_count: int = 0
 
     # Matched files for reporting (populated by orchestrator)
     matched_files: List[str] = field(default_factory=list)
+
+    def add_verified_file(self, file_path: str) -> None:
+        """Add a successfully verified file to tracking."""
+        self._verified_files.add(file_path)
+
+    def add_verification_failure(self, file_path: str, error: str) -> None:
+        """Add a verification failure to tracking."""
+        self._verification_failures[file_path] = error
+
+    def get_verification_results(self) -> tuple[List[str], Dict[str, str]]:
+        """
+        Get verification results.
+
+        Returns:
+            Tuple of (verified_files, verification_failures)
+        """
+        return list(self._verified_files), dict(self._verification_failures)
+
+    def reset(self) -> None:
+        """Reset all tracking state."""
+        self.progress = ProgressInfo(
+            total_files=0, downloaded_files=0, total_bytes=0, downloaded_bytes=0
+        )
+        self._completed_files.clear()
+        self._failed_files.clear()
+        self._verified_files.clear()
+        self._verification_failures.clear()
+        self._skipped_count = 0
+        self.matched_files.clear()
 
     def update_file_progress(
         self, bytes_downloaded: int, current_file: Optional[str] = None

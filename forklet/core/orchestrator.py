@@ -4,6 +4,7 @@ with concurrency and error handling.
 """
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import List, Optional, Dict, Set, Tuple, Callable, Any
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from ..models import (
     ProgressInfo,
     DownloadStatus,
     GitHubFile,
+    VerificationMethod,
 )
 from ..services import GitHubAPIService, DownloadService
 from .filter import FilterEngine
@@ -348,6 +350,42 @@ class DownloadOrchestrator:
             self.progress_tracker.update_file_progress(bytes_written, file.path)
             self.progress_tracker.complete_file()
 
+            # Verify integrity if requested
+            if (
+                request.verify_integrity
+                and request.verification_method != VerificationMethod.NONE
+            ):
+                verified = False
+                try:
+                    if request.verification_method == VerificationMethod.GIT_BLOB_SHA1:
+                        # Verify using Git blob SHA1
+                        verified = await self._verify_git_blob_sha1(
+                            target_path, file.sha
+                        )
+                    elif request.verification_method == VerificationMethod.SIZE:
+                        # Verify using file size
+                        actual_size = await asyncio.to_thread(
+                            lambda: target_path.stat().st_size
+                        )
+                        verified = actual_size == file.size
+                    # Add other methods as needed
+                except Exception as e:
+                    logger.warning(
+                        f"Integrity verification failed for {file.path}: {e}"
+                    )
+                    verified = False
+
+                if verified:
+                    self.progress_tracker.verified_files.append(file.path)
+                    logger.debug(f"Integrity verified for {file.path}")
+                else:
+                    self.progress_tracker.verification_failures[file.path] = (
+                        "Integrity verification failed"
+                    )
+                    logger.warning(f"Integrity verification failed for {file.path}")
+                    # Treat verification failure as a failure? For now, we'll still return the bytes but track it.
+                    # Optionally we could delete the file and return None to trigger retry.
+
             logger.debug(f"Downloaded {file.path} ({bytes_written} bytes)")
             return bytes_written
 
@@ -355,6 +393,34 @@ class DownloadOrchestrator:
             logger.error(f"Error downloading {file.path}: {e}")
             self.progress_tracker.add_failed_file(file.path, str(e))
             raise
+
+    async def _verify_git_blob_sha1(self, file_path: Path, expected_sha: str) -> bool:
+        """
+        Verify a file's SHA-1 hash matches the expected Git blob SHA-1.
+
+        Git blob SHA-1 is computed as: SHA1("blob " + <size> + "\0" + <content>)
+
+        Args:
+            file_path: Path to the file to verify
+            expected_sha: Expected SHA-1 hash
+
+        Returns:
+            True if verification passes, False otherwise
+        """
+        try:
+            # Read file content
+            content = await asyncio.to_thread(lambda: file_path.read_bytes())
+
+            # Create Git blob header: "blob <size>\0"
+            header = f"blob {len(content)}\0".encode("utf-8")
+
+            # Calculate SHA1 of header + content
+            sha1_hash = hashlib.sha1(header + content).hexdigest()
+
+            return sha1_hash == expected_sha
+        except Exception as e:
+            logger.debug(f"Git blob SHA1 verification failed for {file_path}: {e}")
+            return False
 
     # Delegate methods to state controller for external control
     def cancel(self) -> Optional[DownloadResult]:
