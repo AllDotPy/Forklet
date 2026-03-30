@@ -24,6 +24,7 @@ from .concurrency_manager import ConcurrencyManager
 from .progress_tracker import ProgressTracker
 from .state_controller import StateController
 
+from forklet.infrastructure import RateLimitInfo
 from forklet.infrastructure.logger import logger
 
 

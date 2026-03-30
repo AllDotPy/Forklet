@@ -2,22 +2,26 @@
 Service for interacting with GitHub API with rate limiting and error handling.
 """
 
-from typing import List, Optional, Dict, Any, AsyncIterator
-
+from typing import List, Optional, Dict, Any, AsyncIterator, Callable
+import datetime
 import asyncio
 import httpx
 from github import Github, GithubException
 # from github.Repository import Repository as GithubRepository
 
-from ..infrastructure.rate_limiter import RateLimiter
-from ..infrastructure.retry_manager import RetryManager
-from ..infrastructure.error_handler import (
+# from ..infrastructure.rate_limiter import RateLimiter
+# from ..infrastructure.retry_manager import RetryManager
+from ..infrastructure import (
     handle_api_error,
     RateLimitError,
     RepositoryNotFoundError,
     DownloadError,
+    RateLimiter,
+    RetryManager,
+    CacheManager,
+    RateLimitInfo
 )
-from ..infrastructure.cache_manager import CacheManager
+# from ..infrastructure.cache_manager import CacheManager
 from ..models import RepositoryInfo, GitReference, RepositoryType, GitHubFile
 from ..models.constants import USER_AGENT
 
@@ -75,19 +79,19 @@ class GitHubAPIService:
         # Configure HTTP client
         headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": USER_AGENT}
 
-        if auth_token:
-            headers["Authorization"] = f"token {auth_token}"
+        if self.auth_token:
+            headers["Authorization"] = f"token {self.auth_token}"
 
         self.http_client = httpx.AsyncClient(
-            headers=headers, timeout=httpx.Timeout(timeout)
+            headers=headers, timeout=httpx.Timeout(self.timeout)
         )
 
         # Sync client for PyGithub (used only for metadata)
         self.github_client = (
             Github(
-                auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
+                self.auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
             )
-            if auth_token
+            if self.auth_token
             else Github(retry=self.retry_manager.max_retries, user_agent=USER_AGENT)
         )
 
@@ -129,19 +133,19 @@ class GitHubAPIService:
         # Configure HTTP client
         headers = {"Accept": "application/vnd.github.v3+json", "User-Agent": USER_AGENT}
 
-        if auth_token:
-            headers["Authorization"] = f"token {auth_token}"
+        if self.auth_token:
+            headers["Authorization"] = f"token {self.auth_token}"
 
         self.http_client = httpx.AsyncClient(
-            headers=headers, timeout=httpx.Timeout(timeout)
+            headers=headers, timeout=httpx.Timeout(self.timeout)
         )
 
         # Sync client for PyGithub (used only for metadata)
         self.github_client = (
             Github(
-                auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
+                self.auth_token, retry=self.retry_manager.max_retries, user_agent=USER_AGENT
             )
-            if auth_token
+            if self.auth_token
             else Github(retry=self.retry_manager.max_retries, user_agent=USER_AGENT)
         )
 
