@@ -56,6 +56,11 @@ class DownloadOrchestrator:
         self._current_result = None
         self._active_tasks = self.concurrency_manager._active_tasks
 
+        # Set up rate limit callback to adjust concurrency based on API rate limit status
+        self.github_service.rate_limiter.set_rate_limit_callback(
+            self._on_rate_limit_update
+        )
+
     @property
     def is_cancelled(self) -> bool:
         """Check if the orchestrator is cancelled (backwards compatibility)."""
@@ -444,3 +449,38 @@ class DownloadOrchestrator:
         self._is_paused = self.state_controller.is_paused
         self._current_result = None
         self._active_tasks = self.concurrency_manager._active_tasks
+
+    def _on_rate_limit_update(self, rate_limit_info: RateLimitInfo) -> None:
+        """
+        Adjust download concurrency based on GitHub API rate limit status.
+
+        This is called by the rate limiter when rate limit information is updated.
+        It dynamically adjusts the concurrency level to stay within rate limits.
+        """
+        # Calculate a safe concurrency level based on remaining rate limit
+        # We want to leave enough buffer for other API calls (repo info, etc.)
+        # Assume we need ~10 API calls per download operation (simplified)
+        api_calls_per_download = 10
+
+        if rate_limit_info.remaining < api_calls_per_download * 2:
+            # Very low rate limit - reduce concurrency significantly
+            new_max_concurrent = max(
+                1, rate_limit_info.remaining // (api_calls_per_download * 2)
+            )
+        elif rate_limit_info.remaining < api_calls_per_download * 10:
+            # Moderate rate limit - reduce concurrency somewhat
+            new_max_concurrent = max(
+                1, rate_limit_info.remaining // (api_calls_per_download * 2)
+            )
+        else:
+            # Plenty of rate limit - use configured maximum
+            new_max_concurrent = self._max_concurrent_downloads
+
+        # Apply the new concurrency level if it's different
+        if new_max_concurrent != self.concurrency_manager.max_concurrent:
+            logger.debug(
+                f"Adjusting download concurrency from {self.concurrency_manager.max_concurrent} "
+                f"to {new_max_concurrent} based on rate limit "
+                f"({rate_limit_info.remaining}/{rate_limit_info.limit} remaining)"
+            )
+            self.concurrency_manager.update_max_concurrent(new_max_concurrent)

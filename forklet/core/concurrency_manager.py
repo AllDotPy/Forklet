@@ -146,3 +146,27 @@ class ConcurrencyManager:
     def is_busy(self) -> bool:
         """Check if there are active tasks."""
         return len(self._active_tasks) > 0
+
+    def update_max_concurrent(self, new_max_concurrent: int) -> None:
+        """
+        Update the maximum number of concurrent operations.
+
+        This method should be called when no tasks are currently executing
+        to avoid breaking the semaphore's invariants.
+
+        Args:
+            new_max_concurrent: The new maximum number of concurrent operations
+        """
+        if self.is_busy():
+            logger.warning(
+                f"Cannot update max_concurrent while {len(self._active_tasks)} tasks are active"
+            )
+            return
+
+        if new_max_concurrent <= 0:
+            raise ValueError("max_concurrent must be positive")
+
+        self.max_concurrent = new_max_concurrent
+        # Replace the semaphore with a new one having the updated value
+        self._semaphore = asyncio.Semaphore(new_max_concurrent)
+        logger.debug(f"Updated max_concurrent to {new_max_concurrent}")
